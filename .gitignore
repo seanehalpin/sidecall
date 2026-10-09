@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.output/
+.wxt/
+dist/
+.svelte-kit/
+
+# Models / large artifacts
+*.wav
+*.onnx
+.DS_Store
