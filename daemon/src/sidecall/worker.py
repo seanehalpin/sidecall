@@ -29,6 +29,7 @@ from .prompts import WORKER_SYSTEM_APPEND, render_worker_prompt
 from .protocol.messages import TaskEventKind
 from .protocol.models import Preset, Task
 from .session import OnEvent, WorkerResult
+from .uploads import Image, sdk_prompt
 
 if TYPE_CHECKING:
     from .session import RepoSession
@@ -179,8 +180,10 @@ class ClaudeWorker:
         self._task_id = task.id
         files: list[str] = []
         try:
+            image = self._screenshot(task)
+            prompt = render_worker_prompt(task, screenshot_attached=image is not None)
             client = await self._ensure_client()
-            await client.query(render_worker_prompt(task))
+            await client.query(sdk_prompt(prompt, image))
             result: ResultMessage | None = None
             async for msg in client.receive_response():
                 if isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:
@@ -201,6 +204,15 @@ class ClaudeWorker:
         finally:
             self._task_id = None
         return self._to_result(result, files)
+
+    def _screenshot(self, task: Task) -> Image | None:
+        ref = task.page.screenshot if task.page is not None else None
+        if not ref:
+            return None
+        image = self.session.uploads.load(ref)
+        if image is None:
+            log.warning("screenshot %s for task %s not found", ref, task.id)
+        return image
 
     def _to_result(self, result: ResultMessage | None, files: list[str]) -> WorkerResult:
         if result is None:

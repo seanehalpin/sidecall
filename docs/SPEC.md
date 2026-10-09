@@ -181,6 +181,10 @@ type ElementInfo = {
   - When the daemon is down, the service worker is terminated. A `chrome.alarms` alarm every 30 s (`periodInMinutes: 0.5`) wakes it to reconnect.
   - State that must survive service worker restarts lives in `chrome.storage.session`.
 - Routes messages between the picker, the rail and the offscreen document.
+- **Page context on every typed turn:**
+  - On each `user.text`, the service worker attaches `page` (url, route, title, viewport) for the active tab of the last focused window, but only if that tab is on the bound origin.
+  - The screenshot comes from `captureVisibleTab` as JPEG (quality 80), downscaled to at most 1568 px on the long edge and uploaded to `POST /api/upload`. Any failure sends the turn with `screenshot: null`; the user's message is never dropped.
+  - This needs host permission `<all_urls>`, because `captureVisibleTab` requires `<all_urls>` or `activeTab`, and `activeTab` is only granted by a toolbar click and is lost on navigation (verified). Chrome therefore lists Sidecall as able to read data on all sites.
 - Shows `chrome.notifications` for callbacks and approvals, only when the rail isn't open. A notification click calls `chrome.sidePanel.open({windowId})` synchronously in the click handler, with the window id carried in the notification id. If that fails, the window is focused instead.
 
 ## 6. Daemon
@@ -192,6 +196,9 @@ Python 3.12, managed with uv. Main dependencies: `pipecat-ai` (with local and ML
 - Bind to 127.0.0.1 only.
 - **Pairing:** on first run the daemon generates a token and prints a pairing code; the extension stores the token.
 - Every WebSocket and HTTP request must present the token, and the WebSocket Origin must be `chrome-extension://<id>`. Reject anything else.
+- **Uploads:** `POST /api/upload` takes `Authorization: Bearer <token>` plus the extension `Origin`, with a body of `image/jpeg`, `image/png` or `image/webp` up to 8 MB.
+  - It returns `{ref}` (32 hex characters). Files are stored in `SIDECALL_HOME/uploads/` and pruned after 7 days, at startup.
+  - Errors: 401 bad token, 403 bad origin, 415 unsupported type, 413 too large.
 - The extension manifest pins a `key`, so the extension ID (and therefore the Origin the daemon checks) is stable across unpacked installs. Unpacked IDs otherwise change with the load path.
 
 ### 6.2 Repo registry and state
@@ -223,6 +230,10 @@ Python 3.12, managed with uv. Main dependencies: `pipecat-ai` (with local and ML
   - `list_tasks()`, `get_task_status(id)`, `cancel_task(id)`, `reorder_tasks(ids)`
   - `get_pick(id)`: the full payload, when the inline summary isn't enough
   - `request_undo()`: queues a worker task asking it to undo its last change
+- **Page context:** each turn starts with a page line (`Page: "<title>" — <url> (route …, viewport …)`) and carries the screenshot as an image block.
+  - The talker uses them to work out which route file and element the user means, and prefers changing what's on that page.
+  - If a change would touch a shared component used in many places (design-system components, layouts, global styles) and the user didn't say "everywhere", it asks "Just on this page, or everywhere?" before dispatching.
+  - The page of the dispatching turn is stored on the task (`Task.page`).
 - **Each user turn includes:** text with markers, compact pick summaries (source, component chain, selector, key styles, repeat info), and crop screenshots as images. At call start, also the queue state and recent task results.
 
 ### 6.4 Brief schema
@@ -251,7 +262,7 @@ class Brief(BaseModel):
   - A PreToolUse hook (matcher `Bash|Edit|Write|NotebookEdit`) runs the classifier on every call. It returns "deny" for git push and out-of-repo writes, and "ask" for actions that need approval. The hook is required because acceptEdits auto-allows some Bash commands (`ls`, `mkdir`, `echo > file`) without consulting `can_use_tool`.
   - `can_use_tool` receives the "ask" cases and awaits the user's approval. It has no timeout. Never wait inside the hook, because hooks time out after 60 s.
 - One persistent session, so follow-ups ("do the same on the detail view") have context. Resume across days.
-- The brief is rendered into a prompt together with the full pick payloads and both screenshots per pick.
+- The brief is rendered into a prompt together with the full pick payloads and both screenshots per pick, plus a "Page the user was looking at" section and that page's screenshot from `Task.page`. The worker scopes the change to that page unless the brief says otherwise.
 - The worker keeps Claude Code's `claude_code` preset system prompt and appends Sidecall's rules: keep changes minimal, never push, don't start dev servers, and end with a short summary.
 - Streamed SDK messages become `task.event` messages (for example "editing src/lib/Card.svelte").
 - On result: a summary of what changed plus files touched → `task.completed`. On error → `task.failed` with the reason.
@@ -350,7 +361,7 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
 - `pair.request {code}`
 - `repo.map {origin, path}`, `repo.browse {origin}`
 - `pick.add {Pick}`, `pick.remove {id}`, `picks.clear`
-- `user.text {text, pickIds}`
+- `user.text {text, pickIds, page}` (page context, §5.6)
 - `call.start`, `call.end`, `call.mute {muted}`
 - `task.cancel {id}`, `task.reorder {ids}`
 - `approval.respond {id, allow}`

@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from .prompts import TALKER_SYSTEM_PROMPT, brief_tool_schema
 from .protocol.models import Brief, Task
 from .session import OnDelta
+from .uploads import Image, sdk_prompt
 
 if TYPE_CHECKING:
     from .session import RepoSession
@@ -200,7 +201,7 @@ class ClaudeTalker:
             self._client = client
         return self._client
 
-    async def reply(self, prompt: str, on_delta: OnDelta) -> str:
+    async def reply(self, prompt: str, on_delta: OnDelta, image: Image | None = None) -> str:
         client = await self._ensure_client()
         streamed: list[str] = []
         fallback: list[str] = []
@@ -212,7 +213,7 @@ class ClaudeTalker:
             on_delta(text)
 
         try:
-            await client.query(prompt)
+            await client.query(sdk_prompt(prompt, image))
             async for msg in client.receive_response():
                 if isinstance(msg, StreamEvent):
                     if msg.parent_tool_use_id is not None:

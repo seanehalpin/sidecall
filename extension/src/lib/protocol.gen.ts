@@ -321,8 +321,22 @@ export interface UserText {
  * via the `definition` "UserTextPayload".
  */
 export interface UserTextPayload {
+  page: PageContext | null;
   pickIds: number[];
   text: string;
+}
+/**
+ * The page the user was looking at when they sent a turn.
+ *
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "PageContext".
+ */
+export interface PageContext {
+  route: string;
+  screenshot: string | null;
+  title: string;
+  url: string;
+  viewport: Viewport;
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema
@@ -550,6 +564,7 @@ export interface Task {
   finishedAt: number | null;
   id: string;
   lastEvent: string | null;
+  page: PageContext | null;
   startedAt: number | null;
   status: 'queued' | 'running' | 'blocked' | 'completed' | 'failed' | 'cancelled';
   summary: string | null;

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from .protocol.models import Brief, Pick, Target, Task
+from .protocol.models import Brief, PageContext, Pick, Target, Task
 
 TALKER_SYSTEM_PROMPT = """\
 You are Sidecall's talker: the conversational half of a tool for prototyping by talking. \
@@ -35,6 +35,15 @@ it again; tell them it's in progress.
 Mention completed or failed tasks briefly when relevant.
 - Use list_tasks, get_task_status, cancel_task and request_undo when the user asks about, \
 stops, or wants to undo work.
+
+The page the user is on:
+- Each turn says which page the user is looking at (title, URL, route), usually with a \
+screenshot of what they see. Use it to work out which route file and which element they \
+mean ("the dropdown", "this card"), and prefer changing what's on this page.
+- If the change would touch a shared component used in many places (design-system \
+components, layouts, global styles) and the user didn't say "everywhere", ask one short \
+question first, like "Just on this page, or everywhere?", then dispatch.
+- Put the page URL and route, and what the user is looking at, into the brief.
 """
 
 WORKER_SYSTEM_APPEND = """\
@@ -47,6 +56,8 @@ Rules:
 - Don't start, restart or stop dev servers.
 - If a step is denied, continue without it if you can, and mention it in your summary.
 - Finish with a one to three sentence plain-text summary of what you changed.
+- Briefs say which page the user was looking at. Scope the change to that page unless \
+the brief says otherwise; don't change shared components used elsewhere without being asked.
 """
 
 UNDO_BRIEF = Brief(
@@ -102,7 +113,16 @@ def _section(title: str, items: Sequence[str]) -> list[str]:
     return [f"{title}:", *(f"- {item}" for item in items), ""]
 
 
-def render_worker_prompt(task: Task, picks: Sequence[Pick] = ()) -> str:
+def render_page(page: PageContext) -> str:
+    v = page.viewport
+    return f'"{page.title}" — {page.url} (route {page.route}, viewport {v.w}x{v.h})'
+
+
+def render_worker_prompt(
+    task: Task, picks: Sequence[Pick] = (), screenshot_attached: bool | None = None
+) -> str:
+    """The worker's prompt for one task. `screenshot_attached` defaults to whether the
+    task's page has a screenshot ref; pass False when the image couldn't be loaded."""
     brief = task.brief
     lines: list[str] = [f"# Task: {brief.title}", "", f"Goal: {brief.goal}", ""]
     lines += _section("Targets", [render_target(t) for t in brief.targets])
@@ -113,8 +133,28 @@ def render_worker_prompt(task: Task, picks: Sequence[Pick] = ()) -> str:
         lines += ["Notes:", brief.notes, ""]
     if picks:
         lines += _section("Picked elements", [render_pick_summary(p) for p in picks])
+    page = task.page
+    if page is not None:
+        v = page.viewport
+        lines += _section(
+            "Page the user was looking at",
+            [
+                f"URL: {page.url}",
+                f"Route: {page.route}",
+                f'Title: "{page.title}"',
+                f"Viewport: {v.w}x{v.h} CSS px at {v.dpr:g}x",
+            ],
+        )
+        if bool(page.screenshot) if screenshot_attached is None else screenshot_attached:
+            lines += ["A screenshot of what the user saw is attached.", ""]
+    lines += ["Instructions:"]
+    if page is not None:
+        lines.append(
+            "- Scope the change to the page above unless the brief says otherwise. Don't "
+            "change shared components, layouts or global styles used on other pages "
+            "unless the brief asks for that."
+        )
     lines += [
-        "Instructions:",
         "- Make the change described above. Keep it minimal and focused on the brief.",
         "- Never run git push.",
         "- Don't start dev servers; the user's dev server is already running and hot-reloads.",
@@ -126,9 +166,21 @@ def render_worker_prompt(task: Task, picks: Sequence[Pick] = ()) -> str:
 # --- talker ------------------------------------------------------------------------
 
 
-def render_talker_turn(text: str, notes: Sequence[str] = (), picks: Sequence[Pick] = ()) -> str:
-    """One user turn for the talker: unseen system notes, the user's text, picks."""
-    lines = [*notes, f"User: {text}"]
+def render_talker_turn(
+    text: str,
+    notes: Sequence[str] = (),
+    picks: Sequence[Pick] = (),
+    page: PageContext | None = None,
+    screenshot_attached: bool | None = None,
+) -> str:
+    """One user turn for the talker: unseen system notes, the page, the user's text, picks.
+    `screenshot_attached` defaults to whether the page has a screenshot ref."""
+    lines = [*notes]
+    if page is not None:
+        lines.append(f"Page: {render_page(page)}")
+        if bool(page.screenshot) if screenshot_attached is None else screenshot_attached:
+            lines.append("A screenshot of what the user currently sees is attached.")
+    lines.append(f"User: {text}")
     if picks:
         lines += ["Picks:", *(render_pick_summary(p) for p in picks)]
     return "\n".join(lines)

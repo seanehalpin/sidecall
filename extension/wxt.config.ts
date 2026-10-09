@@ -17,7 +17,9 @@ export default defineConfig({
     key: EXTENSION_KEY,
     // sidePanel is added automatically for the sidepanel entrypoint; listed for clarity.
     permissions: ['sidePanel', 'storage', 'notifications', 'alarms', 'tabs'],
-    host_permissions: ['http://localhost/*', 'http://127.0.0.1/*'],
+    // <all_urls> is what chrome.tabs.captureVisibleTab needs for the page-context
+    // screenshot on every turn (activeTab only lasts until the next navigation).
+    host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', '<all_urls>'],
     action: { default_title: 'Open Sidecall' },
   },
 });

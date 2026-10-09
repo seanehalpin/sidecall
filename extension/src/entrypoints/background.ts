@@ -7,6 +7,8 @@
 //   hello again on the same socket whenever the active tab's origin changes.
 // - Keeps RailState via the pure reducer, persists it to storage.session and
 //   pushes it to every connected page.
+// - Attaches page context (URL, route, title, viewport and a screenshot uploaded
+//   to POST /api/upload) to every user.text turn.
 import { browser, type Browser } from 'wxt/browser';
 import { backoffDelay } from '@/lib/backoff';
 import {
@@ -18,15 +20,24 @@ import {
   normalisePairingCode,
   parsePort,
   type PageCommand,
+  type PageDraft,
   type WorkerMessage,
 } from '@/lib/messaging';
 import { allowedOrigin } from '@/lib/origin';
+import {
+  SCREENSHOT_QUALITY,
+  SCREENSHOT_TIMEOUT_MS,
+  downscaleSize,
+  pageContextFor,
+  withTimeout,
+} from '@/lib/page-context';
 import {
   envelope,
   envelopeFromDraft,
   parseServerMessage,
   type ClientMessage,
   type NotifyPayload,
+  type PageContext,
   type ServerMessage,
 } from '@/lib/protocol';
 import {
@@ -213,6 +224,75 @@ export default defineBackground(() => {
     sendHello();
   }
 
+  // --- Page context for user turns -------------------------------------------
+
+  async function captureAndUpload(
+    windowId: number,
+  ): Promise<{ ref: string; bitmapWidth: number }> {
+    const dataUrl = await browser.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 80 });
+    let blob = await (await fetch(dataUrl)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const bitmapWidth = bitmap.width;
+    try {
+      const size = downscaleSize(bitmap.width, bitmap.height);
+      if (size.scaled) {
+        const canvas = new OffscreenCanvas(size.width, size.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('no 2d context');
+        ctx.drawImage(bitmap, 0, 0, size.width, size.height);
+        blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: SCREENSHOT_QUALITY });
+      }
+    } finally {
+      bitmap.close();
+    }
+    const res = await fetch(`http://127.0.0.1:${daemonPort}/api/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`upload failed: HTTP ${res.status}`);
+    const body = (await res.json()) as { ref?: unknown };
+    if (typeof body.ref !== 'string') throw new Error('upload returned no ref');
+    return { ref: body.ref, bitmapWidth };
+  }
+
+  /**
+   * The page the user is looking at: the active tab of the last focused window,
+   * if it's on the bound origin. Never throws; a failed screenshot just leaves
+   * `screenshot` null (captureVisibleTab is rate limited to ~2 calls/s).
+   */
+  async function gatherPage(): Promise<PageContext | null> {
+    const bound = state.repo?.origin ?? null;
+    let tab: Browser.tabs.Tab | undefined;
+    try {
+      [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+    } catch {
+      return null;
+    }
+    if (!tab) return null;
+    const base = pageContextFor(tab, bound);
+    if (!base || tab.windowId === undefined) return base;
+    try {
+      const capture = await withTimeout(captureAndUpload(tab.windowId), SCREENSHOT_TIMEOUT_MS, 'screenshot');
+      return pageContextFor(tab, bound, capture);
+    } catch (err) {
+      console.warn('[sidecall] screenshot skipped:', err);
+      return base;
+    }
+  }
+
+  // user.text turns go out in order, each after its page context is gathered.
+  let turnChain: Promise<void> = Promise.resolve();
+
+  function sendUserText(draft: Extract<PageDraft, { type: 'user.text' }>): void {
+    turnChain = turnChain.then(async () => {
+      const page = await gatherPage().catch(() => null);
+      if (!token || !send(envelopeFromDraft({ ...draft, payload: { ...draft.payload, page } }))) {
+        local({ kind: 'error', error: { code: 'not_connected', message: 'Not connected to the daemon.' } });
+      }
+    });
+  }
+
   // --- Notifications ---------------------------------------------------------
 
   function showNotification(p: NotifyPayload): void {
@@ -263,6 +343,14 @@ export default defineBackground(() => {
     switch (cmd.cmd) {
       case 'send':
         if (!isPageDraft(cmd.draft)) return;
+        if (cmd.draft.type === 'user.text') {
+          if (!token || !isOpen()) {
+            local({ kind: 'error', error: { code: 'not_connected', message: 'Not connected to the daemon.' } });
+            return;
+          }
+          sendUserText(cmd.draft);
+          return;
+        }
         if (!token || !send(envelopeFromDraft(cmd.draft))) {
           local({ kind: 'error', error: { code: 'not_connected', message: 'Not connected to the daemon.' } });
         }

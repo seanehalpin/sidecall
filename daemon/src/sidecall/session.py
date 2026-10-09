@@ -43,6 +43,7 @@ from .protocol.messages import (
 )
 from .protocol.models import (
     Brief,
+    PageContext,
     Preset,
     RepoInfo,
     RepoState,
@@ -53,6 +54,7 @@ from .protocol.models import (
 )
 from .queue import TaskQueue
 from .state import SessionStore, TranscriptStore
+from .uploads import Image, UploadStore
 
 log = logging.getLogger(__name__)
 
@@ -62,8 +64,9 @@ OnEvent = Callable[[TaskEventKind, str], None]
 
 
 class Talker(Protocol):
-    async def reply(self, prompt: str, on_delta: OnDelta) -> str:
-        """Run one turn, streaming text through `on_delta`; return the full text."""
+    async def reply(self, prompt: str, on_delta: OnDelta, image: Image | None = None) -> str:
+        """Run one turn (with an optional screenshot), streaming text through
+        `on_delta`; return the full text."""
         ...
 
     async def interrupt(self) -> None: ...
@@ -122,6 +125,7 @@ class RepoSession:
         self.queue.load()
         self.transcript = TranscriptStore(self.dirs.transcripts)
         self.sessions = SessionStore(self.dirs.sessions)
+        self.uploads = UploadStore(home)
         self.approvals = ApprovalBroker(
             emit, on_blocked=self._on_blocked, on_unblocked=self._on_unblocked
         )
@@ -130,6 +134,8 @@ class RepoSession:
         self._worker: Worker | None = None
         self._talker_lock = asyncio.Lock()
         self._talker_busy = False
+        # The page of the talker turn in progress; tasks it dispatches inherit it.
+        self._turn_page: PageContext | None = None
         self._unseen: list[str] = []
         self._cancel_requested: set[str] = set()
         self._wake = asyncio.Event()
@@ -216,25 +222,35 @@ class RepoSession:
 
     # --- user turns (talker) ---
 
-    def submit_user_text(self, text: str, pick_ids: list[int] | None = None) -> asyncio.Task[None]:
+    def submit_user_text(
+        self,
+        text: str,
+        pick_ids: list[int] | None = None,
+        page: PageContext | None = None,
+    ) -> asyncio.Task[None]:
         """Record the user's text now and run the talker turn in the background."""
         self._add_transcript("user", text, pick_ids=pick_ids)
-        task = asyncio.create_task(self._user_turn(text))
+        task = asyncio.create_task(self._user_turn(text, page))
         self._bg.add(task)
         task.add_done_callback(self._bg.discard)
         return task
 
-    async def _user_turn(self, text: str) -> None:
+    async def _user_turn(self, text: str, page: PageContext | None = None) -> None:
         # A new user turn interrupts the talker's current reply (SPEC §9.2).
         if self._talker_busy and self._talker is not None:
             with contextlib.suppress(Exception):
                 await self._talker.interrupt()
         async with self._talker_lock:
-            await self._run_talker_turn(text)
+            await self._run_talker_turn(text, page)
 
-    async def _run_talker_turn(self, text: str) -> None:
+    async def _run_talker_turn(self, text: str, page: PageContext | None = None) -> None:
         notes, self._unseen = self._unseen, []
-        prompt = render_talker_turn(text, notes)
+        image: Image | None = None
+        if page is not None and page.screenshot:
+            image = await asyncio.to_thread(self.uploads.load, page.screenshot)
+            if image is None:
+                log.warning("screenshot %s not found; sending the turn without it", page.screenshot)
+        prompt = render_talker_turn(text, notes, page=page, screenshot_attached=image is not None)
         turn_id = _new_id()
         parts: list[str] = []
 
@@ -243,11 +259,12 @@ class RepoSession:
             self._emit(AgentTextDelta(payload=AgentTextDeltaPayload(turn_id=turn_id, delta=delta)))
 
         self._talker_busy = True
+        self._turn_page = page
         full = ""
         try:
             if self._talker is None:
                 self._talker = self._talker_factory(self)
-            full = await self._talker.reply(prompt, on_delta)
+            full = await self._talker.reply(prompt, on_delta, image)
         except Exception as exc:
             log.exception("talker turn failed")
             self._unseen = notes + self._unseen
@@ -260,6 +277,7 @@ class RepoSession:
             return
         finally:
             self._talker_busy = False
+            self._turn_page = None
         reply = (full or "".join(parts)).strip()
         self._emit(AgentTextDone(payload=AgentTextDonePayload(turn_id=turn_id)))
         if reply:
@@ -268,8 +286,18 @@ class RepoSession:
     # --- talker tools ---
 
     def dispatch(self, brief: Brief) -> Task:
+        """Queue a task from the talker; it carries the page of the current turn."""
+        return self._enqueue(brief, self._turn_page)
+
+    def _enqueue(self, brief: Brief, page: PageContext | None) -> Task:
         brief = normalise_brief(brief, self.repo_path)
-        task = Task(id=_new_id(), title=brief.title, brief=brief, created_at=_now_ms())
+        task = Task(
+            id=_new_id(),
+            title=brief.title,
+            brief=brief,
+            created_at=_now_ms(),
+            page=page.model_copy(deep=True) if page is not None else None,
+        )
         self.queue.add(task)
         self._emit(TaskCreated(payload=task))
         self._emit_queue()
@@ -278,7 +306,7 @@ class RepoSession:
         return task
 
     def request_undo(self) -> Task:
-        return self.dispatch(UNDO_BRIEF.model_copy(deep=True))
+        return self._enqueue(UNDO_BRIEF.model_copy(deep=True), None)
 
     def get_task(self, task_id: str) -> Task | None:
         return self.queue.get(task_id)

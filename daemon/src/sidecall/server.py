@@ -48,6 +48,7 @@ from .protocol.messages import (
     parse_client,
 )
 from .session import RepoSession, TalkerFactory, WorkerFactory
+from .uploads import MAX_UPLOAD_BYTES, UploadStore, media_type_of
 
 log = logging.getLogger(__name__)
 
@@ -207,6 +208,7 @@ class Daemon:
         self.ping_interval = ping_interval
         self.sessions: dict[str, RepoSession] = {}
         self.connections: set[Connection] = set()
+        self.uploads = UploadStore(config.home)
 
     @property
     def allowed_origin(self) -> str:
@@ -241,6 +243,34 @@ class Daemon:
         for session in list(self.sessions.values()):
             await session.close()
         self.sessions.clear()
+
+    # --- uploads (screenshots) ---
+
+    async def upload(self, request: Request) -> JSONResponse:
+        """`POST /api/upload`: raw image bytes in, `{"ref": "<32-hex>"}` out."""
+        if request.headers.get("origin") != self.allowed_origin:
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        auth = request.headers.get("authorization", "")
+        scheme, _, given = auth.partition(" ")
+        if scheme.lower() != "bearer" or not secrets.compare_digest(
+            given.strip().encode(), self.config.token.encode()
+        ):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        media_type = media_type_of(request.headers.get("content-type"))
+        if media_type is None:
+            return JSONResponse({"error": "unsupported media type"}, status_code=415)
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+            return JSONResponse({"error": "too large"}, status_code=413)
+        body = bytearray()
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > MAX_UPLOAD_BYTES:
+                return JSONResponse({"error": "too large"}, status_code=413)
+        if not body:
+            return JSONResponse({"error": "empty body"}, status_code=400)
+        ref = await asyncio.to_thread(self.uploads.save, bytes(body), media_type)
+        return JSONResponse({"ref": ref})
 
     # --- websocket ---
 
@@ -334,7 +364,7 @@ class Daemon:
         if isinstance(msg, UserText):
             text = msg.payload.text.strip()
             if text:
-                session.submit_user_text(text, msg.payload.pick_ids)
+                session.submit_user_text(text, msg.payload.pick_ids, msg.payload.page)
         elif isinstance(msg, TaskCancel):
             if not await session.cancel(msg.payload.id):
                 conn.error("unknown_task", "No active task with that id.")
@@ -400,10 +430,18 @@ def create_app(daemon: Daemon) -> Starlette:
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncGenerator[None]:
+        with contextlib.suppress(Exception):
+            removed = await asyncio.to_thread(daemon.uploads.prune)
+            if removed:
+                log.info("pruned %d old uploads", removed)
         yield
         await daemon.close()
 
     return Starlette(
-        routes=[Route("/health", health), WebSocketRoute("/ws", daemon.websocket)],
+        routes=[
+            Route("/health", health),
+            Route("/api/upload", daemon.upload, methods=["POST"]),
+            WebSocketRoute("/ws", daemon.websocket),
+        ],
         lifespan=lifespan,
     )

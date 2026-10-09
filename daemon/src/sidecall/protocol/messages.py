@@ -18,6 +18,7 @@ from .models import (
     CallState,
     Empty,
     Model,
+    PageContext,
     Pick,
     Preset,
     RepoInfo,
@@ -70,6 +71,7 @@ class PickRemovePayload(Model):
 class UserTextPayload(Model):
     text: str
     pick_ids: list[int] = Field(default_factory=list[int])
+    page: PageContext | None = None
 
 
 class CallMutePayload(Model):

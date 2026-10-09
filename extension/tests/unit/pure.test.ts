@@ -53,8 +53,8 @@ describe('backoffDelay', () => {
 
 describe('envelope', () => {
   it('adds a random id and the timestamp', () => {
-    const a = envelope('user.text', { text: 'hi', pickIds: [] }, 1234);
-    const b = envelope('user.text', { text: 'hi', pickIds: [] }, 1234);
+    const a = envelope('user.text', { text: 'hi', pickIds: [], page: null }, 1234);
+    const b = envelope('user.text', { text: 'hi', pickIds: [], page: null }, 1234);
     expect(a).toMatchObject({ type: 'user.text', ts: 1234, payload: { text: 'hi', pickIds: [] } });
     expect(a.id).toMatch(/^[0-9a-f]{12}$/);
     expect(a.id).not.toBe(b.id);

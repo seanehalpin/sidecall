@@ -1,5 +1,6 @@
 // A tiny stand-in for the Python daemon: enough of SPEC §9.1–9.2 to drive the rail.
-import type { IncomingMessage } from 'node:http';
+import { randomBytes } from 'node:crypto';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ClientOf, ClientType, RepoInfo, RepoState, ServerMessage, ServerOf, ServerType } from '../../src/lib/protocol';
@@ -8,6 +9,16 @@ export interface Received {
   msg: ClientMessage;
   at: number;
 }
+
+export interface Upload {
+  ref: string;
+  contentType: string | undefined;
+  origin: string | undefined;
+  authorization: string | undefined;
+  bytes: Buffer;
+}
+
+const EXT_ORIGIN = 'chrome-extension://kcjkimilmanlonlplfancfpoekkphjhb';
 
 type Waiter = { pred: (m: ClientMessage) => boolean; resolve: (m: ClientMessage) => void };
 
@@ -23,23 +34,62 @@ export class FakeDaemon {
   readonly sockets = new Set<WebSocket>();
   /** origin → repo; empty until repo.map. */
   readonly repos = new Map<string, RepoInfo>();
+  /** Accepted POST /api/upload bodies. */
+  readonly uploads = new Map<string, Upload>();
+  /** Every upload attempt's status code, accepted or not. */
+  readonly uploadStatuses: number[] = [];
   pairingCode = '123456';
   token = 'tok-test';
   state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } };
   onUserText: ((ws: WebSocket, m: ClientOf<'user.text'>) => void) | null = null;
   private waiters: Waiter[] = [];
-  private constructor(private readonly wss: WebSocketServer) {}
+  private constructor(
+    private readonly http: Server,
+    private readonly wss: WebSocketServer,
+  ) {}
 
   static async start(): Promise<FakeDaemon> {
-    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, path: '/ws' });
-    await new Promise<void>((r) => wss.once('listening', () => r()));
-    const daemon = new FakeDaemon(wss);
+    const http = createServer();
+    const wss = new WebSocketServer({ server: http, path: '/ws' });
+    const daemon = new FakeDaemon(http, wss);
+    http.on('request', (req, res) => daemon.handleHttp(req, res));
     wss.on('connection', (ws, req) => daemon.accept(ws, req));
+    await new Promise<void>((r) => http.listen(0, '127.0.0.1', () => r()));
     return daemon;
   }
 
   get port(): number {
-    return (this.wss.address() as AddressInfo).port;
+    return (this.http.address() as AddressInfo).port;
+  }
+
+  /** POST /api/upload, checked like the real daemon (SPEC §9). */
+  private handleHttp(req: IncomingMessage, res: ServerResponse): void {
+    const reply = (status: number, body: object) => {
+      this.uploadStatuses.push(status);
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+    if (req.url !== '/api/upload' || req.method !== 'POST') {
+      res.writeHead(404).end();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      if (req.headers.origin !== EXT_ORIGIN) return reply(403, { error: 'forbidden' });
+      if (req.headers.authorization !== `Bearer ${this.token}`) return reply(401, { error: 'unauthorized' });
+      const contentType = req.headers['content-type'];
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType ?? '')) return reply(415, { error: 'type' });
+      const ref = randomBytes(16).toString('hex');
+      this.uploads.set(ref, {
+        ref,
+        contentType,
+        origin: req.headers.origin,
+        authorization: req.headers.authorization,
+        bytes: Buffer.concat(chunks),
+      });
+      reply(200, { ref });
+    });
   }
 
   send(ws: WebSocket, msg: ServerMessage): void {
@@ -151,5 +201,6 @@ export class FakeDaemon {
   async close(): Promise<void> {
     for (const ws of this.sockets) ws.terminate();
     await new Promise<void>((r) => this.wss.close(() => r()));
+    await new Promise<void>((r) => this.http.close(() => r()));
   }
 }

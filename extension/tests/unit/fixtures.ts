@@ -20,6 +20,7 @@ export function task(id: string, patch: Partial<Task> = {}): Task {
     files: [],
     error: null,
     lastEvent: null,
+    page: null,
     ...patch,
   };
 }

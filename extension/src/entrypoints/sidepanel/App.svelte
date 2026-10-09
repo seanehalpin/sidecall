@@ -79,7 +79,7 @@
 
   <Composer
     disabled={!sendable}
-    onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [] } })}
+    onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
   />
 </div>
 

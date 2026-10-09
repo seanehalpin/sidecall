@@ -835,6 +835,48 @@
       "title": "NotifyPayload",
       "type": "object"
     },
+    "PageContext": {
+      "additionalProperties": false,
+      "description": "The page the user was looking at when they sent a turn.",
+      "properties": {
+        "route": {
+          "title": "Route",
+          "type": "string"
+        },
+        "screenshot": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screenshot"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "viewport": {
+          "$ref": "#/$defs/Viewport"
+        }
+      },
+      "required": [
+        "url",
+        "route",
+        "title",
+        "viewport",
+        "screenshot"
+      ],
+      "title": "PageContext",
+      "type": "object"
+    },
     "PageInfo": {
       "additionalProperties": false,
       "properties": {
@@ -1819,6 +1861,17 @@
           "default": null,
           "title": "Lastevent"
         },
+        "page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "startedAt": {
           "anyOf": [
             {
@@ -1872,7 +1925,8 @@
         "summary",
         "files",
         "error",
-        "lastEvent"
+        "lastEvent",
+        "page"
       ],
       "title": "Task",
       "type": "object"
@@ -2424,6 +2478,17 @@
     "UserTextPayload": {
       "additionalProperties": false,
       "properties": {
+        "page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "pickIds": {
           "items": {
             "type": "integer"
@@ -2438,7 +2503,8 @@
       },
       "required": [
         "text",
-        "pickIds"
+        "pickIds",
+        "page"
       ],
       "title": "UserTextPayload",
       "type": "object"

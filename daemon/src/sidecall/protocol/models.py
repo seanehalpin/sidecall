@@ -50,6 +50,27 @@ class Brief(Model):
     notes: str | None = None
 
 
+# --- Page context (attached to every user turn) --------------------------------
+
+
+class Viewport(Model):
+    w: int
+    h: int
+    dpr: float
+
+
+class PageContext(Model):
+    """The page the user was looking at when they sent a turn."""
+
+    url: str
+    route: str
+    """pathname + search + hash"""
+    title: str
+    viewport: Viewport
+    screenshot: str | None = None
+    """Upload ref (POST /api/upload) of the visible viewport, or None."""
+
+
 # --- Tasks and approvals ------------------------------------------------------
 
 TaskStatus = Literal["queued", "running", "blocked", "completed", "failed", "cancelled"]
@@ -74,6 +95,8 @@ class Task(Model):
     files: list[str] = Field(default_factory=list[str])
     error: str | None = None
     last_event: str | None = None
+    page: PageContext | None = None
+    """The page of the user turn that dispatched this task."""
 
 
 # --- Transcript ---------------------------------------------------------------
@@ -98,12 +121,6 @@ class Rect(Model):
     y: float
     w: float
     h: float
-
-
-class Viewport(Model):
-    w: int
-    h: int
-    dpr: float
 
 
 class Scroll(Model):

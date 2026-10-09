@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -15,6 +16,7 @@ from sidecall.config import Config
 from sidecall.protocol.models import Task
 from sidecall.server import Daemon, PairingCode, create_app, normalise_origin
 from sidecall.session import OnDelta, OnEvent, RepoSession, WorkerResult
+from sidecall.uploads import MAX_UPLOAD_BYTES, Image
 
 EXT_ORIGIN = "chrome-extension://kcjkimilmanlonlplfancfpoekkphjhb"
 APP = "http://localhost:5173"
@@ -35,12 +37,14 @@ class FakeTalker:
     def __init__(self, session: RepoSession) -> None:
         self.session = session
         self.prompts: list[str] = []
+        self.images: list[Image | None] = []
         self.interrupts = 0
         self._interrupted = asyncio.Event()
         FakeTalker.instances.append(self)
 
-    async def reply(self, prompt: str, on_delta: OnDelta) -> str:
+    async def reply(self, prompt: str, on_delta: OnDelta, image: Image | None = None) -> str:
         self.prompts.append(prompt)
+        self.images.append(image)
         text = prompt.splitlines()[-1].removeprefix("User: ")
         if text == "hang":
             on_delta("Thinking")
@@ -564,3 +568,103 @@ def test_queue_survives_restart(config: Config, repo: Path) -> None:
         tasks = ws.receive_json()["payload"]["state"]["tasks"]
         assert [t["title"] for t in tasks] == ["slow 1", "slow 2"]
         assert tasks[0]["status"] in ("queued", "running")
+
+
+# --- uploads and page context --------------------------------------------------------
+
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+
+
+def upload(
+    client: TestClient,
+    token: str,
+    body: bytes = JPEG,
+    content_type: str = "image/jpeg",
+    origin: str = EXT_ORIGIN,
+) -> Any:
+    headers = {"authorization": f"Bearer {token}", "origin": origin, "content-type": content_type}
+    return client.post("/api/upload", content=body, headers=headers)
+
+
+def test_upload_success(client: TestClient, config: Config) -> None:
+    res = upload(client, config.token)
+    assert res.status_code == 200
+    ref = res.json()["ref"]
+    assert re.fullmatch(r"[0-9a-f]{32}", ref)
+    assert (config.home / "uploads" / f"{ref}.jpg").read_bytes() == JPEG
+    res = upload(client, config.token, b"png-bytes", "image/png")
+    assert (config.home / "uploads" / f"{res.json()['ref']}.png").read_bytes() == b"png-bytes"
+
+
+def test_upload_rejections(client: TestClient, config: Config) -> None:
+    assert upload(client, "wrong").status_code == 401
+    assert upload(client, "").status_code == 401
+    no_scheme = client.post(
+        "/api/upload",
+        content=JPEG,
+        headers={"authorization": config.token, "origin": EXT_ORIGIN, "content-type": "image/jpeg"},
+    )
+    assert no_scheme.status_code == 401
+    assert upload(client, config.token, origin="http://localhost:5173").status_code == 403
+    assert upload(client, config.token, origin="chrome-extension://other").status_code == 403
+    assert upload(client, config.token, content_type="image/gif").status_code == 415
+    assert upload(client, config.token, content_type="text/plain").status_code == 415
+    big = b"\0" * (MAX_UPLOAD_BYTES + 1)
+    assert upload(client, config.token, big).status_code == 413
+    assert upload(client, config.token, b"").status_code == 400
+    assert client.get("/api/upload").status_code == 405
+    assert not (config.home / "uploads").exists() or not any((config.home / "uploads").iterdir())
+
+
+def test_old_uploads_are_pruned_at_startup(config: Config) -> None:
+    uploads = config.home / "uploads"
+    uploads.mkdir(parents=True)
+    old = uploads / ("a" * 32 + ".jpg")
+    old.write_bytes(b"x")
+    fresh = uploads / ("b" * 32 + ".jpg")
+    fresh.write_bytes(b"y")
+    stamp = old.stat().st_mtime - 8 * 24 * 3600
+    os.utime(old, (stamp, stamp))
+    with TestClient(create_app(make_daemon(config))):
+        pass
+    assert not old.exists() and fresh.exists()
+
+
+def test_turn_with_page_reaches_talker_and_task(
+    client: TestClient, config: Config, repo: Path
+) -> None:
+    ref = upload(client, config.token).json()["ref"]
+    page = {
+        "url": f"{APP}/settings?tab=a#x",
+        "route": "/settings?tab=a#x",
+        "title": "Settings",
+        "viewport": {"w": 1440, "h": 900, "dpr": 2},
+        "screenshot": ref,
+    }
+    ws = bound(client, config, repo)
+    try:
+        send(ws, "user.text", {"text": "magenta dropdown", "pickIds": [], "page": page})
+        created, _ = until(ws, "task.created")
+        assert created["payload"]["page"] == page
+        until(ws, "task.completed")
+        talker = FakeTalker.instances[-1]
+        prompt = talker.prompts[-1]
+        assert f'Page: "Settings" — {APP}/settings?tab=a#x' in prompt
+        assert "(route /settings?tab=a#x, viewport 1440x900)" in prompt
+        assert "A screenshot of what the user currently sees is attached." in prompt
+        assert talker.images[-1] == Image(JPEG, "image/jpeg")
+
+        # A missing upload: the turn still runs, without the image or the claim.
+        gone = {**page, "screenshot": "f" * 32}
+        send(ws, "user.text", {"text": "chat", "pickIds": [], "page": gone})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        assert talker.images[-1] is None
+        assert "screenshot" not in talker.prompts[-1]
+
+        # No page at all: text only; tasks it dispatches have no page.
+        send(ws, "user.text", {"text": "plain", "pickIds": []})
+        created, _ = until(ws, "task.created")
+        assert created["payload"]["page"] is None
+        assert "Page:" not in talker.prompts[-1]
+    finally:
+        ws.__exit__(None, None, None)

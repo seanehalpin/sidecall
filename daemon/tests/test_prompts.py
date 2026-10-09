@@ -13,7 +13,7 @@ from sidecall.prompts import (
     render_worker_prompt,
     task_note,
 )
-from sidecall.protocol.models import Brief, Target
+from sidecall.protocol.models import Brief, PageContext, Target, Viewport
 from sidecall.talker import NarrationFilter, task_summary
 from sidecall.worker import (
     approval_command,
@@ -220,3 +220,49 @@ def test_normalise_brief(tmp_path: Path) -> None:
     out = normalise_brief(b, tmp_path)
     assert [t.file for t in out.targets] == ["src/a.css", "b.css", None]
     assert b.targets[0].file == str(tmp_path / "src" / "a.css")  # input untouched
+
+
+def _page(screenshot: str | None = "0123456789abcdef0123456789abcdef") -> PageContext:
+    return PageContext(
+        url="http://localhost:5173/settings?tab=a",
+        route="/settings?tab=a",
+        title="Settings",
+        viewport=Viewport(w=1440, h=900, dpr=2),
+        screenshot=screenshot,
+    )
+
+
+def test_render_talker_turn_with_page() -> None:
+    turn = render_talker_turn("dropdown should be magenta", ["[System] note"], page=_page())
+    assert turn.splitlines() == [
+        "[System] note",
+        'Page: "Settings" — http://localhost:5173/settings?tab=a '
+        "(route /settings?tab=a, viewport 1440x900)",
+        "A screenshot of what the user currently sees is attached.",
+        "User: dropdown should be magenta",
+    ]
+    no_shot = render_talker_turn("hi", page=_page(None))
+    assert "screenshot" not in no_shot and no_shot.endswith("User: hi")
+    missing = render_talker_turn("hi", page=_page(), screenshot_attached=False)
+    assert "screenshot" not in missing
+
+
+def test_render_worker_prompt_page_section() -> None:
+    task = make_task("Magenta dropdown")
+    assert "Page the user was looking at" not in render_worker_prompt(task)
+    assert "Scope the change" not in render_worker_prompt(task)
+    task.page = _page()
+    prompt = render_worker_prompt(task)
+    section = prompt.split("Page the user was looking at:\n", 1)[1].split("\n\n", 1)[0]
+    assert section.splitlines() == [
+        "- URL: http://localhost:5173/settings?tab=a",
+        "- Route: /settings?tab=a",
+        '- Title: "Settings"',
+        "- Viewport: 1440x900 CSS px at 2x",
+    ]
+    assert "A screenshot of what the user saw is attached." in prompt
+    instructions = prompt.split("Instructions:\n", 1)[1]
+    assert instructions.startswith("- Scope the change to the page above unless the brief")
+    assert "screenshot" not in render_worker_prompt(task, screenshot_attached=False)
+    task.page = _page(None)
+    assert "screenshot" not in render_worker_prompt(task)

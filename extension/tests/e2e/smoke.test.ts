@@ -30,8 +30,24 @@ function task(id: string, title: string, patch: Partial<Task> = {}): Task {
     files: [],
     error: null,
     lastEvent: null,
+    page: null,
     ...patch,
   };
+}
+
+/** Width and height from a JPEG's SOF marker. */
+function jpegSize(buf: Buffer): { width: number; height: number } | null {
+  let i = 2;
+  while (i + 9 < buf.length) {
+    if (buf[i] !== 0xff) return null;
+    const marker = buf[i + 1] ?? 0;
+    const len = buf.readUInt16BE(i + 2);
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+    }
+    i += 2 + len;
+  }
+  return null;
 }
 
 describe('extension smoke', () => {
@@ -59,7 +75,10 @@ describe('extension smoke', () => {
     ctx = await chromium.launchPersistentContext(profile, {
       channel: 'chromium', // full Chromium; its new headless mode supports extensions
       headless: true,
-      args: ['--headless=new', `--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
+      // A real 2x window (Playwright's deviceScaleFactor doesn't reach
+      // captureVisibleTab), so captures exceed the 1568 px cap and get downscaled.
+      viewport: null,
+      args: ['--headless=new', '--force-device-scale-factor=2', '--window-size=1280,800', `--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
     });
     sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'));
     extId = new URL(sw.url()).host;
@@ -88,7 +107,7 @@ describe('extension smoke', () => {
 
   it('pairs, then asks for the repo of the active localhost tab', async () => {
     appPage = await ctx.newPage();
-    await appPage.goto(`${appOrigin}/some/route`);
+    await appPage.goto(`${appOrigin}/some/route?tab=a#top`);
     panel = await ctx.newPage();
     await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
     // A new tab starts as about:blank, which (correctly) unbinds; make the app
@@ -154,7 +173,28 @@ describe('extension smoke', () => {
     await composer.fill('make the heading on the home page red');
     await composer.press('Enter');
     const userText = await daemon.waitFor('user.text');
-    expect(userText.payload).toEqual({ text: 'make the heading on the home page red', pickIds: [] });
+    const { page, ...rest } = userText.payload;
+    expect(rest).toEqual({ text: 'make the heading on the home page red', pickIds: [] });
+    // Page context: the active app tab, with a screenshot uploaded first.
+    expect(page).toMatchObject({
+      url: `${appOrigin}/some/route?tab=a#top`,
+      route: '/some/route?tab=a#top',
+      title: 'Fixture',
+    });
+    expect(page?.viewport.w).toBeGreaterThan(0);
+    expect(page?.viewport.h).toBeGreaterThan(0);
+    expect(page?.screenshot).toMatch(/^[0-9a-f]{32}$/);
+    const shot = daemon.uploads.get(page?.screenshot ?? '');
+    expect(shot).toBeDefined();
+    expect(shot?.contentType).toBe('image/jpeg');
+    expect(shot?.origin).toBe(`chrome-extension://${EXPECTED_ID}`);
+    expect(shot?.authorization).toBe('Bearer tok-test');
+    expect(shot?.bytes.length).toBeGreaterThan(100);
+    expect([...(shot?.bytes.subarray(0, 3) ?? [])]).toEqual([0xff, 0xd8, 0xff]); // JPEG magic
+    const dims = jpegSize(shot?.bytes ?? Buffer.alloc(0));
+    // 1280 CSS px at 2x captures 2560 px wide; the worker scales it to the 1568 px cap.
+    expect(page?.viewport.dpr).toBe(2);
+    expect(dims?.width).toBe(1568);
     await expect.poll(() => composer.inputValue()).toBe('');
 
     await panel.locator('[data-role="user"]').getByText('make the heading on the home page red').waitFor();
