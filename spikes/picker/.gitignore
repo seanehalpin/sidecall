@@ -1,0 +1,5 @@
+node_modules/
+.cache/
+ext/picker.js
+ext-noshim/
+results.json

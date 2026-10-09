@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Sidecall picker spike",
+  "version": "0.0.1",
+  "description": "Spike: MAIN-world source resolution for Svelte 5 / React 18 / React 19.",
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["picker.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ]
+}
