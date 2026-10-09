@@ -251,6 +251,7 @@ class Brief(BaseModel):
   - `can_use_tool` receives the "ask" cases and awaits the user's approval. It has no timeout. Never wait inside the hook, because hooks time out after 60 s.
 - One persistent session, so follow-ups ("do the same on the detail view") have context. Resume across days.
 - The brief is rendered into a prompt together with the full pick payloads and both screenshots per pick.
+- The worker keeps Claude Code's `claude_code` preset system prompt and appends Sidecall's rules: keep changes minimal, never push, don't start dev servers, and end with a short summary.
 - Streamed SDK messages become `task.event` messages (for example "editing src/lib/Card.svelte").
 - On result: a summary of what changed plus files touched → `task.completed`. On error → `task.failed` with the reason.
 - **Undo:** use Claude Code's default behaviour — ask the worker to undo its last change. No custom git logic in v1. (Possible later: the SDK's `enable_file_checkpointing` with `rewind_files()` for a deterministic undo; not yet tested.)
@@ -386,10 +387,13 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
 - **Hello:**
   - Every connection must authenticate with `hello` before anything else, except `pair.request`.
   - A bad token returns `error {code: "unauthorized"}` and closes the socket with code 4401.
+  - Any other message before `hello` (except `pong`) gets the same treatment.
+  - A bad `Origin` is rejected before the upgrade is accepted, which the client sees as HTTP 403.
+  - A pairing code is invalidated after 10 wrong attempts.
   - `clockOffset` in `welcome` is `daemon_now_ms − clockSample`.
 - **Repo binding:**
   - `hello.origin` is the origin of the active tab, for example `http://localhost:5173`. Only `http://localhost:*` and `http://127.0.0.1:*` origins count; anything else is sent as `null`.
-  - A mapped origin gets `welcome`.
+  - A mapped origin gets `welcome`. If the mapped folder no longer exists, it gets `repo.unknown` instead.
   - An unmapped origin gets `repo.unknown {origin}`.
   - A `null` origin gets `error {code: "no_origin"}`, and the connection stays authenticated.
 - **Origin changes:** when the active tab's origin changes, the extension sends `hello` again on the same socket, and the daemon rebinds the connection to the new repo and replies as above.
@@ -420,6 +424,15 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
 - When a step needs approval, the daemon sends `task.blocked`, then `notify`.
 - The extension replies with `approval.respond`, and the daemon broadcasts `approval.resolved`, which removes the card.
 - Denying cancels that step only: the worker is told it was denied and carries on without it.
+
+**Settings**
+- `settings.update` gets no reply or broadcast. The preset is saved per repo (in `sessions.json`) and applies from the worker's next tool call.
+
+**Task event kinds**
+- `task.event.kind` is `status` (for example "Started"), `edit` (Edit, Write, MultiEdit, NotebookEdit), `tool` (other tool calls, for example "Reading src/x.svelte") or `text` (short snippets of the worker's own text).
+
+**Error codes**
+- Beyond the codes above: `bad_message`, `no_repo` (a turn or task message on a connection with no repo bound), `bad_origin`, `unknown_task`, `unknown_approval`, and `not_implemented` (for `pick.*`, `call.*` and `webrtc.*` until their milestones).
 
 **Cancel and reorder**
 - `task.cancel` on a queued task marks it cancelled. On the running task, it interrupts the worker.
