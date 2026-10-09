@@ -15,14 +15,14 @@ All of these were measured on an Apple M4 Pro with 24 GB, on 2026-10-09. The bro
 
 | # | Risk | Answer | Status |
 |---|---|---|---|
-| 1 | Mic in the offscreen document | Works once the options page grants the mic. Without the grant: instant `NotAllowedError`, no prompt. | Resolved; manual check pending |
-| 2 | Echo cancellation | Test tool built. It compares `<audio>`, WebAudio and WebRTC playback across AEC modes. | **Open: needs a manual run** |
+| 1 | Mic in the offscreen document | Works once the options page grants the mic. Without the grant: instant `NotAllowedError`, no prompt. | Resolved; manual check passed |
+| 2 | Echo cancellation | Test tool built. It compares `<audio>`, WebAudio and WebRTC playback across AEC modes. | Resolved: user's manual run passed (no numbers captured) |
 | 3 | Service worker WebSocket lifetime | 30 min with no disconnect and no restart, using JSON pings every 20 s. Protocol pings don't work. | Resolved |
-| 4 | React 19 precision, DevTools coexistence | React 19 gets **element** precision. DevTools breaks without a shim and works with it. | Resolved; panel UI manual check pending |
+| 4 | React 19 precision, DevTools coexistence | React 19 gets **element** precision. DevTools breaks without a shim and works with it. | Resolved; manual check passed |
 | 5 | Agent SDK | Image input, custom tools, local login, resume and interrupt all work. Warm first-text latency is 0.54 s on Haiku and 1.1 s on Opus. | Resolved |
 | 6 | Parakeet streaming timestamps | Broken past the context window. Transcribe each VAD segment offline instead (about 80 ms). | Resolved by design change |
 | 7 | Pipecat processor wrapping the talker, with interruptions | `InterruptionFrame` reaches the processor; cancel the background task there. Barge-in takes about 350 ms. | Resolved (stub talker) |
-| new | Smart Turn ends turns at mid-sentence pauses | 5 of 8 synthetic utterances were cut off at pauses of 240–420 ms. | **Open: tune with real speech** |
+| new | Smart Turn ends turns at mid-sentence pauses | 5 of 8 synthetic utterances were cut off at pauses of 240–420 ms. | Mitigation specced (§6.9); thresholds tuned in M3 |
 
 ## 1. Mic in the offscreen document
 

@@ -392,10 +392,10 @@ CLAUDE.md
 
 Status after Milestone 0; evidence is in `docs/spikes.md`.
 
-1. **Mic capture in the offscreen document, with the permission grant flow.** Resolved, with a manual check pending in the user's Chrome.
-2. **Echo cancellation with agent playback from the offscreen document.** Open: the test tool is built, and the verdict needs a manual run on real speakers.
+1. **Mic capture in the offscreen document, with the permission grant flow.** Resolved; manual check passed in the user's Chrome.
+2. **Echo cancellation with agent playback from the offscreen document.** Resolved: the user's manual run on real speakers passed. Agent audio still plays only through the WebRTC remote track.
 3. **MV3 service worker lifetime with a long-lived WebSocket.** Resolved: JSON pings kept it alive for 30 minutes, plus an alarm wake for daemon restarts.
-4. **React 19 source precision, and coexistence with React DevTools.** Resolved: element precision, plus a DevTools shim. The DevTools panel UI needs a manual check.
+4. **React 19 source precision, and coexistence with React DevTools.** Resolved: element precision, plus a DevTools shim. The DevTools panel UI passed a manual check.
 5. **Agent SDK details** (image input in streaming mode, in-process custom tools, first-token latency of a persistent session, running on the local Claude Code login). Resolved: all four work.
 6. **Parakeet word timestamps in streaming mode.** Resolved by not streaming: STT runs offline per VAD segment.
 7. **A Pipecat custom processor wrapping `ClaudeSDKClient`, including interruption handling.** Resolved with a stub talker; the real `ClaudeSDKClient` is wired up in Milestone 3.
