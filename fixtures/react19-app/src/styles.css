@@ -1,0 +1,13 @@
+body { margin: 0; font-family: system-ui, sans-serif; }
+.layout { display: flex; min-height: 100vh; }
+main { flex: 1; padding: 24px; }
+.sidebar { width: 200px; background: #f4f4f5; padding: 16px; }
+.sidebar ul { list-style: none; margin: 0; padding: 0; }
+.sidebar a { display: block; padding: 8px; color: #333; text-decoration: none; border-radius: 6px; }
+.sidebar a.active { background: #e4e4e7; font-weight: 600; }
+.card-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+.card-title { font-size: 16px; margin: 0 0 8px; }
+.card-body { color: #555; font-size: 14px; }
+.invite-form { margin-top: 32px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.invite-form h2 { width: 100%; font-size: 16px; }
