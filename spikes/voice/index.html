@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Sidecall voice spike</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 2rem; max-width: 52rem; }
+  button { font-size: 1rem; padding: .4rem 1rem; margin-right: .5rem; }
+  #status { margin: .8rem 0; font-weight: 600; }
+  #vad { display: inline-block; width: .8rem; height: .8rem; border-radius: 50%; background: #ccc; vertical-align: middle; }
+  #vad.on { background: #2a2; }
+  #log { border: 1px solid #ddd; padding: .5rem; height: 26rem; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 12px; }
+  .user { color: #036; } .bot { color: #630; } .lat { color: #080; font-weight: 600; } .meta { color: #888; } .intr { color: #b00; }
+</style>
+</head>
+<body>
+<h2>Sidecall voice spike</h2>
+<button id="connect">Connect</button>
+<button id="disconnect" disabled>Disconnect</button>
+<label><input type="checkbox" id="slow" /> slow / long stub replies (barge-in test)</label>
+<div id="status">idle <span id="vad"></span></div>
+<audio id="audio" autoplay></audio>
+<div id="log"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+let pc, dc;
+function log(cls, text) {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.textContent = `${new Date().toISOString().slice(11, 23)}  ${text}`;
+  $("log").appendChild(d);
+  $("log").scrollTop = 1e9;
+}
+function sendConfig() {
+  if (dc && dc.readyState === "open") {
+    const slow = $("slow").checked;
+    dc.send(JSON.stringify({ type: "config", word_delay: slow ? 0.12 : 0, extra: slow ? 6 : 0 }));
+  }
+}
+$("slow").onchange = sendConfig;
+
+async function connect() {
+  $("connect").disabled = true;
+  $("status").firstChild.textContent = "connecting… ";
+  const mic = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  pc = new RTCPeerConnection();
+  dc = pc.createDataChannel("app");
+  dc.onopen = () => { log("meta", "data channel open"); sendConfig(); };
+  dc.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    switch (m.type) {
+      case "ready": log("meta", "bot ready"); $("status").firstChild.textContent = "connected — speak "; break;
+      case "vad": $("vad").className = m.speaking ? "on" : ""; break;
+      case "transcript":
+        log("user", `you: ${m.text}   [stt ${m.stt_ms} ms]`);
+        log("meta", "     words: " + m.words.map((w) => `${w.w}@${w.s}`).join(" "));
+        break;
+      case "smart_turn": log("meta", `smart turn: ${m.complete ? "complete" : "incomplete"} p=${m.p} (${m.ms} ms)`); break;
+      case "interruption": log("intr", "interruption"); break;
+      case "latency":
+        log("bot", `bot: ${m.bot_text}`);
+        log("lat", `end-of-speech → first bot audio (server side): ${m.e2e_ms} ms  (turn end at ${m.turn_end_ms} ms)`);
+        break;
+      default: if (m.type !== "signalling") log("meta", JSON.stringify(m));
+    }
+  };
+  pc.ontrack = (e) => { $("audio").srcObject = e.streams[0] || new MediaStream([e.track]); };
+  mic.getTracks().forEach((t) => pc.addTrack(t, mic));
+  // SmallWebRTC sends audio back on the same transceiver; video not used.
+  await pc.setLocalDescription(await pc.createOffer());
+  await new Promise((r) => {
+    if (pc.iceGatheringState === "complete") return r();
+    pc.onicegatheringstatechange = () => pc.iceGatheringState === "complete" && r();
+    setTimeout(r, 2000);
+  });
+  const res = await fetch("/api/offer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type }),
+  });
+  const answer = await res.json();
+  await pc.setRemoteDescription({ sdp: answer.sdp, type: answer.type });
+  pc.onconnectionstatechange = () => log("meta", `pc: ${pc.connectionState}`);
+  $("disconnect").disabled = false;
+}
+function disconnect() {
+  pc && pc.close();
+  pc = dc = null;
+  $("connect").disabled = false;
+  $("disconnect").disabled = true;
+  $("status").firstChild.textContent = "idle ";
+}
+$("connect").onclick = () => connect().catch((e) => { log("intr", String(e)); $("connect").disabled = false; });
+$("disconnect").onclick = disconnect;
+</script>
+</body>
+</html>
