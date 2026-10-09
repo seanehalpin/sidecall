@@ -1,0 +1,15 @@
+[project]
+name = "agent-sdk"
+version = "0.1.0"
+description = "Sidecall M0 spike 5: claude-agent-sdk"
+authors = [
+    { name = "Sean Halpin", email = "seanehalpin@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.2.164",
+    "pillow>=12.3.0",
+]
+
+[tool.uv]
+package = false

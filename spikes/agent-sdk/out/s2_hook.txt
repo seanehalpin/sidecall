@@ -1,0 +1,18 @@
+[   0.00s] ANTHROPIC_API_KEY set: False (spike expects False -> local Claude Code login)
+[   0.09s] scratch repo: /var/folders/kz/629h7_8j0yd_xwqwp7dnqf8r0000gn/T/sidecall-scratch-d5j1es6_
+[   0.85s] >>> Run exactly this with Bash: git push origin main
+[   0.94s] System init model=claude-haiku-4-5-20251001 permissionMode=bypassPermissions apiKeySource=/login managed key session=84d2d992-7d5a-437e-a596-f7430ec98cc2
+[   2.34s] System thinking_tokens
+[   3.35s] System thinking_tokens
+[   4.92s] System thinking_tokens
+[   4.92s] Assistant[claude-haiku-4-5-20251001] ThinkingBlock
+[   5.32s] Assistant[claude-haiku-4-5-20251001] tool_use Bash {'command': 'git push origin main', 'description': 'Push main branch to origin'}
+[   5.32s]   PreToolUse hook: Bash 'git push origin main'
+[   5.33s] User tool_result err=True 'PreToolUse:Bash hook error: git push is blocked by Sidecall (hook).'
+[   6.61s] System thinking_tokens
+[   6.88s] System thinking_tokens
+[   6.88s] Assistant[claude-haiku-4-5-20251001] ThinkingBlock
+[   7.48s] Assistant[claude-haiku-4-5-20251001] text="The `git push` command was blocked by a Sidecall hook in your environment. You'll need to check your hooks configuration — run `/config` or review your settings"
+[   7.49s] Result subtype=success is_error=False turns=2 duration_ms=6608 cost=$0.0326827 terminal=completed denials=[{'tool_name': 'Bash', 'tool_use_id': 'toolu_01RcAxxP4xfpNN3ZR2Ypgiw7', 'tool_input': {'command': 'git push origin main', 'description': 'Push main branch to origin'}}] result="The `git push` command was blocked by a Sidecall hook in your environment. You'll need to check your hooks configuration — run `/config` or review your settings.json to understand why git push operati"
+[   7.49s] <<< can_use_tool calls this turn: []
+

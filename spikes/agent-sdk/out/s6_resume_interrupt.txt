@@ -1,0 +1,37 @@
+[   0.00s] ANTHROPIC_API_KEY set: False (spike expects False -> local Claude Code login)
+[   0.09s] scratch repo: /var/folders/kz/629h7_8j0yd_xwqwp7dnqf8r0000gn/T/sidecall-scratch-6hi3g2ar
+[   0.85s] System init model=claude-haiku-4-5-20251001 permissionMode=default apiKeySource=/login managed key session=4f2e94d6-2c64-43e9-a534-3fe0dbca89fb
+[   2.16s] System thinking_tokens
+[   2.39s] System thinking_tokens
+[   2.39s] Assistant[claude-haiku-4-5-20251001] ThinkingBlock
+[   2.40s] Assistant[claude-haiku-4-5-20251001] text='ok'
+[   2.42s] Result subtype=success is_error=False turns=1 duration_ms=1620 cost=$0.000957 terminal=completed denials=[] result='ok'
+[   3.40s] session 1 id = 4f2e94d6-2c64-43e9-a534-3fe0dbca89fb
+[   3.81s] resume connect: 0.41s
+[   3.83s] System init model=claude-haiku-4-5-20251001 permissionMode=default apiKeySource=/login managed key session=4f2e94d6-2c64-43e9-a534-3fe0dbca89fb
+[   4.97s] System thinking_tokens
+[   5.12s] System thinking_tokens
+[   5.12s] Assistant[claude-haiku-4-5-20251001] ThinkingBlock
+[   5.15s] Assistant[claude-haiku-4-5-20251001] text='teal-600'
+[   5.16s] Result subtype=success is_error=False turns=1 duration_ms=1348 cost=$0.002056 terminal=completed denials=[] result='teal-600'
+[   5.16s] resumed turn: 1.35s; session id after resume = 4f2e94d6-2c64-43e9-a534-3fe0dbca89fb (same as before: True)
+[   6.28s] scratch repo: /var/folders/kz/629h7_8j0yd_xwqwp7dnqf8r0000gn/T/sidecall-scratch-buz90gv6
+[   6.89s] System init model=claude-haiku-4-5-20251001 permissionMode=default apiKeySource=/login managed key session=4f2e94d6-2c64-43e9-a534-3fe0dbca89fb
+[   7.93s] System thinking_tokens
+[   8.06s] System thinking_tokens
+[   8.07s] Assistant[claude-haiku-4-5-20251001] ThinkingBlock
+[   8.08s] Assistant[claude-haiku-4-5-20251001] text='teal-600'
+[   8.09s] Result subtype=success is_error=False turns=1 duration_ms=1217 cost=$0.0034980000000000002 terminal=completed denials=[] result='teal-600'
+[   9.20s] scratch repo: /var/folders/kz/629h7_8j0yd_xwqwp7dnqf8r0000gn/T/sidecall-scratch-3dcqt1bs
+[   9.55s] System init model=claude-haiku-4-5-20251001 permissionMode=default apiKeySource=/login managed key session=a5402139-f835-4130-abf4-cd2603825231
+[   9.55s] System status
+[  11.28s]   calling interrupt() after 504 streamed chars
+[  11.28s] Assistant[claude-haiku-4-5-20251001] text='I\'ll generate the numbers from one to four hundred as English words, comma separated.\n\n```python\ndef number_to_words(n):\n    """Convert a number to its 
+[  11.29s] Result subtype=error_during_execution is_error=True turns=2 duration_ms=1755 cost=$0.000972 terminal=aborted_streaming denials=[] result=''
+[  11.29s]   interrupt() -> ResultMessage: 0.010s
+[  11.29s]   interrupt() call itself returned; total streamed chars: 504
+[  11.29s] System init model=claude-haiku-4-5-20251001 permissionMode=default apiKeySource=/login managed key session=a5402139-f835-4130-abf4-cd2603825231
+[  11.29s] System status
+[  11.87s] Assistant[claude-haiku-4-5-20251001] text='still alive'
+[  11.88s] Result subtype=success is_error=False turns=1 duration_ms=588 cost=$0.0017499999999999998 terminal=completed denials=[] result='still alive'
+[  11.88s]   follow-up turn after interrupt took 0.59s

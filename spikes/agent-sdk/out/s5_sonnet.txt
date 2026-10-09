@@ -1,0 +1,16 @@
+[   0.00s] ANTHROPIC_API_KEY set: False (spike expects False -> local Claude Code login)
+[   0.00s] ===== variant talker-sonnet
+[   0.09s] scratch repo: /var/folders/kz/629h7_8j0yd_xwqwp7dnqf8r0000gn/T/sidecall-scratch-vixstl6x
+[   1.62s] connect: 1.53s
+[   3.19s] turn 1: msg_start=1.14s first_delta=1.14s assistant=1.55s result=1.57s cost=$0.0092 text='Blue starts with the letter B.'
+[   4.29s] turn 2: msg_start=0.70s first_delta=0.70s assistant=1.10s result=1.11s cost=$0.0101 text='Green starts with the letter G.'
+[   5.60s] turn 3: msg_start=1.27s first_delta=1.27s assistant=1.27s result=1.31s cost=$0.0110 text='Red starts with the letter R.'
+[   6.90s] turn 4: msg_start=1.27s first_delta=1.27s assistant=1.27s result=1.30s cost=$0.0120 text='Purple starts with the letter P.'
+[   8.28s] turn 5: msg_start=1.29s first_delta=1.30s assistant=1.31s result=1.37s cost=$0.0130 text='Orange starts with the letter O.'
+[   9.57s] turn 6: msg_start=1.24s first_delta=1.24s assistant=1.27s result=1.29s cost=$0.0140 text='Yellow starts with the letter Y.'
+[  10.39s] disconnect: 0.82s
+[  10.39s] SUMMARY {'variant': 'talker-sonnet', 'model': 'claude-sonnet-5-5', 'connect': 1.5298300422728062, 't1_first_delta': 1.1360686663538218, 't2plus_first_delta_median': 1.2698540836572647, 't1_result': 1.565480874851346, 't2plus_result_median': 1.2996226251125336, 't2plus_first_delta_min_max': (0.7006930839270353, 1.297927500680089)}
+
+| variant | model | connect s | turn1 first-delta s | turns2+ first-delta median s (min-max) | turn1 result s | turns2+ result median s |
+|---|---|---|---|---|---|---|
+| talker-sonnet | claude-sonnet-5-5 | 1.53 | 1.14 | 1.27 (0.70-1.30) | 1.57 | 1.30 |
