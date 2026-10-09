@@ -181,7 +181,7 @@ type ElementInfo = {
   - When the daemon is down, the service worker is terminated. A `chrome.alarms` alarm every 30 s (`periodInMinutes: 0.5`) wakes it to reconnect.
   - State that must survive service worker restarts lives in `chrome.storage.session`.
 - Routes messages between the picker, the rail and the offscreen document.
-- Shows `chrome.notifications` for callbacks and approvals.
+- Shows `chrome.notifications` for callbacks and approvals, only when the rail isn't open. A notification click calls `chrome.sidePanel.open({windowId})` synchronously in the click handler, with the window id carried in the notification id. If that fails, the window is focused instead.
 
 ## 6. Daemon
 
@@ -385,7 +385,7 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
   - An extension without a token sends `pair.request {code}` as its first message and receives `pair.result {token}`, which it stores in `chrome.storage.local`.
   - A wrong or expired code returns `error {code: "bad_pairing_code"}`.
 - **Hello:**
-  - Every connection must authenticate with `hello` before anything else, except `pair.request`.
+  - Every connection must authenticate with `hello` before anything else, except `pair.request` and `pong` (an unpaired extension still answers pings).
   - A bad token returns `error {code: "unauthorized"}` and closes the socket with code 4401.
   - Any other message before `hello` (except `pong`) gets the same treatment.
   - A bad `Origin` is rejected before the upgrade is accepted, which the client sees as HTTP 403.
@@ -396,6 +396,7 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
   - A mapped origin gets `welcome`. If the mapped folder no longer exists, it gets `repo.unknown` instead.
   - An unmapped origin gets `repo.unknown {origin}`.
   - A `null` origin gets `error {code: "no_origin"}`, and the connection stays authenticated.
+  - The extension's own pages (options, or a panel opened as a tab) keep the current binding. New tabs (`about:blank`, `chrome://newtab`) count as `null`.
 - **Origin changes:** when the active tab's origin changes, the extension sends `hello` again on the same socket, and the daemon rebinds the connection to the new repo and replies as above.
 - **Mapping a repo:**
   - `repo.map` validates that the path is an existing directory, saves it to `config.toml` and replies with `welcome`. A bad path returns `error {code: "bad_path"}`.

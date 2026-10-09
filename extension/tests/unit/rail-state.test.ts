@@ -1,0 +1,359 @@
+import { describe, expect, it } from 'vitest';
+import {
+  applyLocalEvent,
+  applyServerMessage,
+  canSend,
+  groupTasks,
+  initialRailState,
+  railView,
+  reorderIds,
+  TRANSCRIPT_LIMIT,
+  type RailState,
+} from '../../src/lib/rail-state';
+import { approval, msg, repo, task } from './fixtures';
+
+const apply = (s: RailState, ...msgs: Parameters<typeof applyServerMessage>[1][]) =>
+  msgs.reduce(applyServerMessage, s);
+
+function bound(): RailState {
+  let s = initialRailState();
+  s = applyLocalEvent(s, { kind: 'connection', status: 'connected' });
+  s = applyLocalEvent(s, { kind: 'paired', paired: true });
+  s = applyLocalEvent(s, { kind: 'origin', origin: repo.origin });
+  return apply(
+    s,
+    msg('welcome', {
+      repo,
+      clockOffset: 12,
+      state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } },
+    }),
+  );
+}
+
+describe('welcome', () => {
+  it('binds the repo and loads its state', () => {
+    let s = initialRailState();
+    s = applyLocalEvent(s, { kind: 'paired', paired: true });
+    s = apply(
+      s,
+      msg('welcome', {
+        repo,
+        clockOffset: -5,
+        state: {
+          tasks: [task('t1', { status: 'running', lastEvent: 'editing src/App.svelte' })],
+          approvals: [approval('a1', 't1')],
+          transcript: [{ turnId: 'u1', role: 'user', text: 'hi', pickIds: [], ts: 5, taskId: null }],
+          settings: { preset: 'cautious' },
+        },
+      }),
+    );
+    expect(s.repo).toEqual(repo);
+    expect(s.clockOffset).toBe(-5);
+    expect(s.tasks).toHaveLength(1);
+    expect(s.approvals).toHaveLength(1);
+    expect(s.transcript).toEqual([
+      { turnId: 'u1', role: 'user', text: 'hi', pickIds: [], ts: 5, taskId: null, streaming: false },
+    ]);
+    expect(s.lastTaskEvent).toEqual({ t1: 'editing src/App.svelte' });
+    expect(s.settings).toEqual({ preset: 'cautious' });
+  });
+
+  it('replaces per-repo state from a previous binding', () => {
+    let s = bound();
+    s = apply(
+      s,
+      msg('transcript.final', { turnId: 'u1', role: 'user', text: 'old', pickIds: [], taskId: null }),
+      msg('task.created', task('old')),
+      msg('task.blocked', { taskId: 'old', approval: approval('a-old', 'old') }),
+      msg('task.event', { taskId: 'old', kind: 'status', text: 'x' }),
+      msg('error', { code: 'bad_path', message: 'nope' }),
+    );
+    const other = { name: 'react19-app', path: '/r', origin: 'http://localhost:5174' };
+    s = apply(
+      s,
+      msg('welcome', {
+        repo: other,
+        clockOffset: 0,
+        state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } },
+      }),
+    );
+    expect(s.repo).toEqual(other);
+    expect(s.transcript).toEqual([]);
+    expect(s.tasks).toEqual([]);
+    expect(s.approvals).toEqual([]);
+    expect(s.lastTaskEvent).toEqual({});
+    expect(s.lastError).toBeNull();
+    expect(s.repoUnknown).toBeNull();
+  });
+
+  it('clears repo.unknown and no_origin', () => {
+    let s = apply(bound(), msg('repo.unknown', { origin: 'http://localhost:9999' }));
+    expect(s.repoUnknown).toBe('http://localhost:9999');
+    s = apply(
+      s,
+      msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } } }),
+    );
+    expect(s.repoUnknown).toBeNull();
+    expect(railView(s)).toBe('main');
+  });
+});
+
+describe('repo binding', () => {
+  it('repo.unknown drops the old repo and shows setup', () => {
+    let s = apply(bound(), msg('task.created', task('t1')));
+    s = apply(s, msg('repo.unknown', { origin: 'http://localhost:3000' }));
+    expect(s.repo).toBeNull();
+    expect(s.tasks).toEqual([]);
+    expect(s.repoUnknown).toBe('http://localhost:3000');
+    expect(railView(s)).toBe('repo_unknown');
+    expect(canSend(s)).toBe(false);
+  });
+
+  it('no_origin error shows the no-localhost screen', () => {
+    const s = apply(bound(), msg('error', { code: 'no_origin', message: 'No origin' }));
+    expect(s.noOrigin).toBe(true);
+    expect(s.repo).toBeNull();
+    expect(s.lastError).toBeNull();
+    expect(railView(s)).toBe('no_origin');
+  });
+
+  it('a null local origin shows the no-localhost screen', () => {
+    const s = applyLocalEvent(bound(), { kind: 'origin', origin: null });
+    expect(railView(s)).toBe('no_origin');
+  });
+
+  it('bad_path keeps repo.unknown and records the error', () => {
+    let s = apply(bound(), msg('repo.unknown', { origin: 'http://localhost:3000' }));
+    s = apply(s, msg('error', { code: 'bad_path', message: 'Not a directory' }));
+    expect(s.repoUnknown).toBe('http://localhost:3000');
+    expect(s.lastError).toEqual({ code: 'bad_path', message: 'Not a directory' });
+  });
+});
+
+describe('pairing and auth', () => {
+  it('pair.result marks the rail as paired', () => {
+    let s = applyLocalEvent(initialRailState(), { kind: 'connection', status: 'connected' });
+    s = applyLocalEvent(s, { kind: 'origin', origin: repo.origin });
+    expect(railView(s)).toBe('pairing');
+    s = apply(s, msg('error', { code: 'bad_pairing_code', message: 'Wrong code' }));
+    expect(s.lastError?.code).toBe('bad_pairing_code');
+    s = apply(s, msg('pair.result', { token: 'tok' }));
+    expect(s.paired).toBe(true);
+    expect(s.lastError).toBeNull();
+    expect(railView(s)).toBe('binding');
+  });
+
+  it('unauthorized unpairs and drops the repo', () => {
+    const s = apply(bound(), msg('error', { code: 'unauthorized', message: 'Bad token' }));
+    expect(s.paired).toBe(false);
+    expect(s.repo).toBeNull();
+    expect(s.lastError?.code).toBe('unauthorized');
+    expect(railView(s)).toBe('pairing');
+  });
+});
+
+describe('transcript', () => {
+  it('streams agent deltas into one bubble, then finalises it', () => {
+    let s = apply(
+      bound(),
+      msg('transcript.final', { turnId: 'u1', role: 'user', text: 'make it red', pickIds: [], taskId: null }),
+      msg('agent.text.delta', { turnId: 'a1', delta: 'Sure, ' }),
+      msg('agent.text.delta', { turnId: 'a1', delta: 'making the ' }),
+    );
+    expect(s.transcript).toHaveLength(2);
+    expect(s.transcript[1]).toMatchObject({ role: 'agent', text: 'Sure, making the ', streaming: true });
+
+    s = apply(s, msg('agent.text.delta', { turnId: 'a1', delta: 'heading red.' }), msg('agent.text.done', { turnId: 'a1' }));
+    expect(s.transcript[1]).toMatchObject({ text: 'Sure, making the heading red.', streaming: false });
+
+    s = apply(
+      s,
+      msg('transcript.final', { turnId: 'a1', role: 'agent', text: 'Sure, making the heading red!', pickIds: [], taskId: null }),
+    );
+    expect(s.transcript).toHaveLength(2);
+    expect(s.transcript[1]).toMatchObject({ text: 'Sure, making the heading red!', streaming: false });
+  });
+
+  it('ignores deltas that arrive after the final text', () => {
+    let s = apply(
+      bound(),
+      msg('transcript.final', { turnId: 'a1', role: 'agent', text: 'Done.', pickIds: [], taskId: null }),
+      msg('agent.text.delta', { turnId: 'a1', delta: ' extra' }),
+    );
+    expect(s.transcript[0]?.text).toBe('Done.');
+    s = apply(s, msg('agent.text.done', { turnId: 'a1' }));
+    expect(s.transcript[0]?.streaming).toBe(false);
+  });
+
+  it('keeps interleaved turns separate', () => {
+    const s = apply(
+      bound(),
+      msg('agent.text.delta', { turnId: 'a1', delta: 'one' }),
+      msg('transcript.final', { turnId: 's1', role: 'system', text: 'Task queued: Red heading', pickIds: [], taskId: 't1' }),
+      msg('agent.text.delta', { turnId: 'a1', delta: ' two' }),
+    );
+    expect(s.transcript.map((e) => [e.role, e.text])).toEqual([
+      ['agent', 'one two'],
+      ['system', 'Task queued: Red heading'],
+    ]);
+    expect(s.transcript[1]?.taskId).toBe('t1');
+  });
+
+  it('caps the transcript length', () => {
+    let s = bound();
+    for (let i = 0; i < TRANSCRIPT_LIMIT + 10; i++) {
+      s = apply(s, msg('transcript.final', { turnId: `u${i}`, role: 'user', text: `${i}`, pickIds: [], taskId: null }));
+    }
+    expect(s.transcript).toHaveLength(TRANSCRIPT_LIMIT);
+    expect(s.transcript[0]?.text).toBe('10');
+  });
+
+  it('freezes a streaming bubble when the socket drops', () => {
+    let s = apply(bound(), msg('agent.text.delta', { turnId: 'a1', delta: 'half' }));
+    s = applyLocalEvent(s, { kind: 'connection', status: 'offline' });
+    expect(s.transcript[0]?.streaming).toBe(false);
+  });
+
+  it('a user final clears the live partial', () => {
+    let s = apply(bound(), msg('transcript.partial', { text: 'make the' }));
+    expect(s.partial).toBe('make the');
+    s = apply(s, msg('transcript.final', { turnId: 'u1', role: 'user', text: 'make the heading red', pickIds: [], taskId: null }));
+    expect(s.partial).toBeNull();
+  });
+});
+
+describe('tasks', () => {
+  it('task.created, task.event, task.completed', () => {
+    let s = apply(bound(), msg('task.created', task('t1')), msg('task.created', task('t1', { title: 'Renamed' })));
+    expect(s.tasks).toHaveLength(1);
+    expect(s.tasks[0]?.title).toBe('Renamed');
+    s = apply(s, msg('task.event', { taskId: 't1', kind: 'edit', text: 'editing src/routes/+page.svelte' }));
+    expect(s.lastTaskEvent.t1).toBe('editing src/routes/+page.svelte');
+    s = apply(s, msg('task.completed', { taskId: 't1', summary: 'Heading is red', files: ['src/routes/+page.svelte'] }));
+    expect(s.tasks[0]).toMatchObject({ status: 'completed', summary: 'Heading is red', files: ['src/routes/+page.svelte'] });
+  });
+
+  it('task.failed records the reason', () => {
+    const s = apply(bound(), msg('task.created', task('t1', { status: 'running' })), msg('task.failed', { taskId: 't1', reason: 'boom' }));
+    expect(s.tasks[0]).toMatchObject({ status: 'failed', error: 'boom' });
+  });
+
+  it('queue.state replaces the task list and keeps known events', () => {
+    let s = apply(
+      bound(),
+      msg('task.created', task('t1', { status: 'running' })),
+      msg('task.created', task('gone')),
+      msg('task.event', { taskId: 't1', kind: 'tool', text: 'reading files' }),
+      msg('task.event', { taskId: 'gone', kind: 'tool', text: 'x' }),
+    );
+    s = apply(s, msg('queue.state', { tasks: [task('t1', { status: 'running' }), task('t2'), task('t3', { lastEvent: 'from daemon' })] }));
+    expect(s.tasks.map((t) => t.id)).toEqual(['t1', 't2', 't3']);
+    expect(s.lastTaskEvent).toEqual({ t1: 'reading files', t3: 'from daemon' });
+  });
+});
+
+describe('approvals', () => {
+  it('task.blocked adds a card once; approval.resolved removes it', () => {
+    let s = apply(
+      bound(),
+      msg('task.created', task('t1', { status: 'running' })),
+      msg('task.blocked', { taskId: 't1', approval: approval('a1', 't1') }),
+      msg('task.blocked', { taskId: 't1', approval: approval('a1', 't1') }),
+    );
+    expect(s.approvals).toHaveLength(1);
+    expect(s.tasks[0]?.status).toBe('blocked');
+    s = apply(s, msg('approval.resolved', { id: 'a1', allow: true }));
+    expect(s.approvals).toEqual([]);
+    expect(s.tasks[0]?.status).toBe('running');
+  });
+
+  it('resolving an unknown approval is a no-op for tasks', () => {
+    const s0 = apply(bound(), msg('task.created', task('t1', { status: 'blocked' })));
+    const s = apply(s0, msg('approval.resolved', { id: 'zzz', allow: false }));
+    expect(s.tasks[0]?.status).toBe('blocked');
+  });
+});
+
+describe('transport messages', () => {
+  it('ping and notify do not change state', () => {
+    const s = bound();
+    expect(applyServerMessage(s, msg('ping', { seq: 1 }))).toBe(s);
+    expect(applyServerMessage(s, msg('notify', { title: 't', body: 'b', action: 'open' }))).toBe(s);
+  });
+
+  it('call.state is tracked', () => {
+    expect(apply(bound(), msg('call.state', { state: 'listening' })).callState).toBe('listening');
+  });
+});
+
+describe('railView and canSend', () => {
+  it('offline wins over everything', () => {
+    const s = applyLocalEvent(bound(), { kind: 'connection', status: 'offline' });
+    expect(railView(s)).toBe('offline');
+    expect(canSend(s)).toBe(false);
+  });
+
+  it('reconnecting with a known repo keeps the main view but disables sending', () => {
+    const s = applyLocalEvent(bound(), { kind: 'connection', status: 'connecting' });
+    expect(railView(s)).toBe('main');
+    expect(canSend(s)).toBe(false);
+  });
+
+  it('connecting without a repo shows the offline screen', () => {
+    expect(railView(applyLocalEvent(initialRailState(), { kind: 'connection', status: 'connecting' }))).toBe('offline');
+  });
+
+  it('bound and connected can send', () => {
+    expect(railView(bound())).toBe('main');
+    expect(canSend(bound())).toBe(true);
+  });
+
+  it('unpairing locally drops the repo', () => {
+    const s = applyLocalEvent(bound(), { kind: 'paired', paired: false });
+    expect(s.repo).toBeNull();
+    expect(railView(s)).toBe('pairing');
+  });
+});
+
+describe('groupTasks / reorderIds', () => {
+  it('groups by status and sorts finished newest first', () => {
+    const g = groupTasks([
+      task('q1'),
+      task('r', { status: 'running' }),
+      task('c1', { status: 'completed', finishedAt: 10 }),
+      task('q2'),
+      task('f', { status: 'failed', finishedAt: 20 }),
+      task('x', { status: 'cancelled', finishedAt: 5 }),
+    ]);
+    expect(g.running.map((t) => t.id)).toEqual(['r']);
+    expect(g.queued.map((t) => t.id)).toEqual(['q1', 'q2']);
+    expect(g.finished.map((t) => t.id)).toEqual(['f', 'c1', 'x']);
+  });
+
+  it('blocked counts as running', () => {
+    expect(groupTasks([task('b', { status: 'blocked' })]).running).toHaveLength(1);
+  });
+
+  it('moves an id before another or to the end', () => {
+    expect(reorderIds(['a', 'b', 'c'], 'c', 'a')).toEqual(['c', 'a', 'b']);
+    expect(reorderIds(['a', 'b', 'c'], 'a', 'c')).toEqual(['b', 'a', 'c']);
+    expect(reorderIds(['a', 'b', 'c'], 'a', null)).toEqual(['b', 'c', 'a']);
+    expect(reorderIds(['a', 'b', 'c'], 'b', 'b')).toEqual(['a', 'b', 'c']);
+    expect(reorderIds(['a', 'b'], 'zz', 'a')).toEqual(['a', 'b']);
+  });
+});
+
+describe('daemon error codes', () => {
+  it.each(['bad_message', 'no_repo', 'bad_origin', 'unknown_task', 'unknown_approval', 'not_implemented', 'something_new'])(
+    '%s is recorded without touching the binding',
+    (code) => {
+      const before = apply(bound(), msg('task.created', task('t1')));
+      const s = apply(before, msg('error', { code, message: `msg for ${code}` }));
+      expect(s.lastError).toEqual({ code, message: `msg for ${code}` });
+      expect(s.repo).toEqual(before.repo);
+      expect(s.tasks).toEqual(before.tasks);
+      expect(railView(s)).toBe('main');
+      expect(applyLocalEvent(s, { kind: 'clearError' }).lastError).toBeNull();
+    },
+  );
+});
