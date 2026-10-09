@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from helpers import make_task
 
@@ -13,7 +14,7 @@ from sidecall.prompts import (
     task_note,
 )
 from sidecall.protocol.models import Brief, Target
-from sidecall.talker import stream_text, task_summary
+from sidecall.talker import NarrationFilter, task_summary
 from sidecall.worker import (
     approval_command,
     describe_tool_use,
@@ -138,16 +139,59 @@ def test_hook_output_and_approval_command() -> None:
     assert approval_command("Write", {"file_path": "/tmp/x"}) == "Write /tmp/x"
 
 
-def test_stream_text() -> None:
-    delta = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}
-    assert stream_text(delta, "") == "Hi"
-    start = {"type": "content_block_start", "content_block": {"type": "text", "text": ""}}
-    assert stream_text(start, "") == ""
-    assert stream_text(start, "queued.") == " "
-    assert stream_text(start, "queued. ") == ""
-    tool_delta = {"type": "content_block_delta", "delta": {"type": "input_json_delta"}}
-    assert stream_text(tool_delta, "x") == ""
-    assert stream_text({"type": "message_stop"}, "x") == ""
+def _text(t: str) -> dict[str, Any]:
+    return {"type": "content_block_delta", "delta": {"type": "text_delta", "text": t}}
+
+
+def _tool(name: str) -> dict[str, Any]:
+    return {"type": "content_block_start", "content_block": {"type": "tool_use", "name": name}}
+
+
+def _stop(reason: str) -> dict[str, Any]:
+    return {"type": "message_delta", "delta": {"stop_reason": reason}}
+
+
+def _run(events: list[dict[str, Any]]) -> str:
+    f = NarrationFilter()
+    return "".join(f.feed(e) for e in events)
+
+
+def test_narration_before_read_tools_is_dropped() -> None:
+    events = [
+        _text("Let me check the routes."),
+        _tool("Read"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("Let me look"),
+        _text(" closer."),
+        _tool("Grep"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("It's the h1 in +page.svelte. "),
+        _text("I'll make it red."),
+        _stop("end_turn"),
+        {"type": "message_stop"},
+    ]
+    assert _run(events) == "It's the h1 in +page.svelte. I'll make it red."
+
+
+def test_confirmation_before_dispatch_is_kept() -> None:
+    events = [
+        _text("I'll make the heading red."),
+        _tool("mcp__sidecall__dispatch_task"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("It's queued."),
+        _stop("end_turn"),
+        {"type": "message_stop"},
+    ]
+    assert _run(events) == "I'll make the heading red. It's queued."
+
+
+def test_plain_reply_and_tool_input_deltas() -> None:
+    json_delta = {"type": "content_block_delta", "delta": {"type": "input_json_delta"}}
+    assert _run([_text("Hi there."), json_delta, _stop("end_turn")]) == "Hi there."
+    assert _run([{"type": "message_stop"}]) == ""
 
 
 def test_task_summary() -> None:

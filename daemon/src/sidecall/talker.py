@@ -124,19 +124,51 @@ def build_mcp_server(session: RepoSession) -> dict[str, Any]:
     return config
 
 
-def stream_text(event: dict[str, Any], previous: str) -> str:
-    """Text to stream for one raw API stream event ("" for none). `previous` is the last
-    chunk streamed this turn, used to space out text blocks around tool calls."""
-    etype = event.get("type")
-    if etype == "content_block_start":
-        block = cast(dict[str, Any], event.get("content_block") or {})
-        if block.get("type") == "text" and previous and not previous[-1:].isspace():
-            return " "
-    elif etype == "content_block_delta":
-        delta = cast(dict[str, Any], event.get("delta") or {})
-        if delta.get("type") == "text_delta":
-            return str(delta.get("text") or "")
-    return ""
+class NarrationFilter:
+    """Turns raw API stream events into text worth showing (and later speaking).
+
+    Text the talker writes right before a Read/Grep/Glob call is narration ("Let me
+    check the routes..."), so each assistant message's text is held back until we know
+    what follows it: a read tool drops it; anything else (end of turn, or one of
+    Sidecall's own tools such as dispatch_task, which usually follows the one-sentence
+    brief confirmation) releases it. The cost is that a reply appears a message at a
+    time rather than token by token; talker replies are one to three short sentences.
+    """
+
+    def __init__(self) -> None:
+        self._buffer: list[str] = []
+        self._shown = False
+
+    def feed(self, event: dict[str, Any]) -> str:
+        etype = event.get("type")
+        if etype == "content_block_start":
+            block = cast(dict[str, Any], event.get("content_block") or {})
+            if block.get("type") == "tool_use":
+                if block.get("name") in READ_TOOLS:
+                    self._buffer.clear()
+                    return ""
+                return self._flush()
+        elif etype == "content_block_delta":
+            delta = cast(dict[str, Any], event.get("delta") or {})
+            if delta.get("type") == "text_delta":
+                self._buffer.append(str(delta.get("text") or ""))
+        elif etype == "message_delta":
+            delta = cast(dict[str, Any], event.get("delta") or {})
+            reason = delta.get("stop_reason")
+            if reason and reason != "tool_use":
+                return self._flush()
+        elif etype == "message_stop":
+            return self._flush()
+        return ""
+
+    def _flush(self) -> str:
+        text = "".join(self._buffer).strip()
+        self._buffer.clear()
+        if not text:
+            return ""
+        out = f" {text}" if self._shown else text
+        self._shown = True
+        return out
 
 
 class ClaudeTalker:
@@ -172,6 +204,7 @@ class ClaudeTalker:
         client = await self._ensure_client()
         streamed: list[str] = []
         fallback: list[str] = []
+        narration = NarrationFilter()
         self._in_turn = True
 
         def emit(text: str) -> None:
@@ -184,7 +217,7 @@ class ClaudeTalker:
                 if isinstance(msg, StreamEvent):
                     if msg.parent_tool_use_id is not None:
                         continue
-                    text = stream_text(msg.event, streamed[-1] if streamed else "")
+                    text = narration.feed(msg.event)
                     if text:
                         emit(text)
                 elif isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:
