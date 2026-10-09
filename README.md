@@ -6,15 +6,13 @@ The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.m
 
 ## Status
 
-**Milestone 0 (spikes) is done. There's no end-to-end app yet.**
-
-Right now the repo holds standalone experiments that each prove one risky piece works: the mic in a Chrome extension, echo cancellation, the picker, the Claude Agent SDK, and the local voice loop. You can run each one and try it. The first version you can use end to end (type in the side panel, Claude edits a fixture app, the page reloads) arrives with Milestone 1.
+**Milestone 1 is done: you can type a change in the side panel and Claude makes it.** Pointing (⌥-click) arrives in Milestone 2 and voice in Milestone 3.
 
 | Milestone | What you get | Status |
 |---|---|---|
-| 0. Spikes | Each risky piece proven on its own | ✅ Done, manual checks pending ([M0 notes](docs/milestones/M0.md)) |
-| 1. Daemon core and text rail | Type a change in the side panel; Claude makes it | Next |
-| 2. Picker | ⌥-click elements and reference them as `[1]`, `[2]` | |
+| 0. Spikes | Each risky piece proven on its own | ✅ Done ([M0 notes](docs/milestones/M0.md)) |
+| 1. Daemon core and text rail | Type a change in the side panel; Claude makes it | ✅ Built, awaiting your check ([M1 notes](docs/milestones/M1.md)) |
+| 2. Picker | ⌥-click elements and reference them as `[1]`, `[2]` | Next |
 | 3. Voice | Talk instead of typing, with interruptions | |
 | 4. Settings and persistence | Presets, notes, resume across restarts | |
 
@@ -24,7 +22,46 @@ Right now the repo holds standalone experiments that each prove one risky piece 
 - Google Chrome.
 - [uv](https://docs.astral.sh/uv/) (`brew install uv`). It installs Python 3.12 for you.
 - Node 22+ and [pnpm](https://pnpm.io/) 10+.
-- [Claude Code](https://claude.com/claude-code), installed and logged in (`claude` in a terminal). Only the Agent SDK spike needs this today.
+- [Claude Code](https://claude.com/claude-code), installed and logged in (`claude` in a terminal). Sidecall runs on your Claude Code login, so changes use your Claude usage.
+
+## Run Sidecall
+
+> Start each block from the repo root.
+
+**1. Start the daemon** and leave it running:
+
+```sh
+cd daemon
+uv sync
+uv run sidecall start
+```
+
+It prints a 6-digit **pairing code**. You need it once, in step 3.
+
+**2. Build the extension and load it into Chrome:**
+
+```sh
+cd extension
+pnpm install
+pnpm build
+```
+
+In `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose `extension/.output/chrome-mv3`. In the file picker, press **⌘ Shift .** to show the hidden `.output` folder. Pin the Sidecall icon.
+
+If you're working on the extension itself, run `pnpm dev` instead and load `extension/.output/chrome-mv3-dev`. It rebuilds on save; click reload on the extension in `chrome://extensions` to pick up changes.
+
+**3. Open your app and pair:**
+
+1. Start your app's dev server and open it in Chrome on `localhost` (for example a fixture: `cd fixtures/svelte5-app && pnpm install && pnpm dev`).
+2. Click the Sidecall icon. The side panel opens.
+3. Enter the pairing code from step 1.
+4. When it asks which folder the app's code lives in, paste the repo path or click **Choose folder…**. Sidecall remembers it for that `localhost` address.
+
+**4. Ask for a change.** Type, for example, "make the heading on the home page red", and press Enter. The agent confirms what it's going to do and queues a task. Claude Code edits the code in the background, the page hot-reloads, and the panel shows when it's done.
+
+- **Installing packages** shows an approval card in the panel. Nothing installs until you click Approve.
+- **`git push`** is always refused.
+- **Pointing at the fixtures:** Claude edits the files in place. If you use `fixtures/` inside this repo, those are tracked files; undo with `git checkout fixtures/`.
 
 ## Try the spikes
 
@@ -110,6 +147,9 @@ If a port is taken, set another one: `PORT=5273 pnpm dev`.
 
 ## Troubleshooting
 
+- **The panel says "Daemon offline".** Start it with `cd daemon && uv run sidecall start`. The panel reconnects within about 30 s.
+- **The panel says "No local app".** The active tab has to be a `http://localhost:…` or `http://127.0.0.1:…` page.
+- **Lost the pairing code.** Restart the daemon; it prints a new one each time it starts.
 - **"Port already in use" for a fixture.** Another dev server holds 5173 or 5174. Run it with `PORT=<other> pnpm dev`.
 - **Recording fails with `NotAllowedError`.** The mic hasn't been granted to the extension. Use **Open options (grant mic)** in the side panel and allow it there.
 - **The voice page is stuck on "connecting…".** Make sure you're running the latest `server.py`, which keeps WebRTC on 127.0.0.1 (the macOS firewall can block it on your network address), then restart it with Ctrl+C and `uv run python server.py`, and reload the page.
@@ -128,4 +168,4 @@ spikes/      Milestone 0 experiments (throwaway); each has a FINDINGS.md
 docs/        SPEC.md, PLAN.md, spikes.md, milestones/
 ```
 
-Only `fixtures/`, `spikes/` and `docs/` exist today.
+`daemon/`, `extension/` and `protocol/` arrived with Milestone 1.

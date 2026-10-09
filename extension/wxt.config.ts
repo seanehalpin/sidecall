@@ -9,6 +9,8 @@ export const EXTENSION_KEY =
 export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-svelte'],
+  // `pnpm dev` only builds and watches; load the output into your own Chrome.
+  webExt: { disabled: true },
   manifest: {
     name: 'Sidecall',
     description: 'Prototype by conversation: point, talk, and let Claude Code edit your local app.',

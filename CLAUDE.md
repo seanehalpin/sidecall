@@ -47,6 +47,8 @@ Live mic audio, echo cancellation, and the extension running in the user's own C
 
 ## Local run (fill in as built)
 
-- Daemon: `cd daemon && uv run sidecall start`
-- Extension: `cd extension && pnpm dev`, then load the unpacked build from `extension/.output/chrome-mv3`
+- Daemon: `cd daemon && uv run sidecall start` (prints the pairing code; `SIDECALL_HOME=<dir>` isolates state for testing)
+- Extension: `cd extension && pnpm build`, then load the unpacked build from `extension/.output/chrome-mv3`. `pnpm dev` watches and writes `extension/.output/chrome-mv3-dev` (WXT's own browser launch is disabled).
+- Protocol: after changing `daemon/src/sidecall/protocol/`, run `cd daemon && uv run python -m sidecall.protocol.export`, then `cd extension && pnpm gen:protocol`
+- Tests: `cd daemon && uv run pytest` (`--integration` calls Claude); `cd extension && pnpm test && pnpm check && pnpm test:e2e`; M1 acceptance with real Claude: `cd extension && pnpm build && node tests/e2e/m1-acceptance.mjs` (about $0.50)
 - Fixtures: `cd fixtures/<app> && pnpm dev`
