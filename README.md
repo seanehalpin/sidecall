@@ -28,7 +28,9 @@ Right now the repo holds standalone experiments that each prove one risky piece 
 
 ## Try the spikes
 
-Each spike is its own project. Run its commands from the repo root as shown.
+Each spike is its own project.
+
+> **Start every block below from the repo root.** The paths are relative to it. If you're already inside another spike, `cd` back to the root first (for example `cd ../..` from `spikes/voice`).
 
 ### Voice loop: talk to a stub agent
 
