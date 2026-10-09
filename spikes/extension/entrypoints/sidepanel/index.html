@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Sidecall spike</title>
+    <style>
+      body{font:13px system-ui;margin:.8rem}
+      h2{font-size:14px;margin:1rem 0 .4rem}
+      button{font-size:13px;padding:.3rem .6rem;margin:.15rem 0}
+      pre{white-space:pre-wrap;background:#f4f4f4;padding:.4rem;font-size:11px;max-height:14rem;overflow:auto}
+      table{border-collapse:collapse;font-size:12px;width:100%}
+      td,th{border:1px solid #ccc;padding:2px 4px;text-align:right}
+      th:first-child,td:first-child{text-align:left}
+      .verdict{font-weight:bold;margin:.4rem 0}
+      .good{color:#087f23}.bad{color:#b00020}
+      audio{width:100%;height:28px}
+    </style>
+  </head>
+  <body>
+    <div>Mic permission (extension origin): <b id="perm">…</b> · SW: <span id="sw">…</span></div>
+    <button id="open-options">Open options (grant mic)</button>
+
+    <h2>Spike 1 — mic in offscreen document</h2>
+    <button id="record5">Record 5 s (offscreen) + play back</button>
+    <button id="panel-mic">Try getUserMedia in side panel</button>
+    <button id="close-offscreen">Close offscreen doc</button>
+    <div id="record5-player"></div>
+    <pre id="record5-out"></pre>
+
+    <h2>Spike 2 — echo cancellation</h2>
+    <p>No headphones. Speakers at a normal listening volume (~50–70%). Stay quiet during the test (~2 min).</p>
+    <button id="echo">Run echo test (3 playback paths × AEC modes)</button>
+    <div id="progress"></div>
+    <div id="echo-summary"></div>
+    <div id="echo-players"></div>
+    <pre id="echo-out"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

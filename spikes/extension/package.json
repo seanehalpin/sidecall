@@ -1,0 +1,20 @@
+{
+  "name": "sidecall-spike-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "postinstall": "wxt prepare",
+    "build:ws": "wxt build && wxt build -m wsnone && wxt build -m wsproto",
+    "test": "vitest run",
+    "test:e2e": "wxt build -m e2e && node scripts/test-spike1.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3",
+    "wxt": "^0.21.4"
+  },
+  "version": "0.0.1"
+}

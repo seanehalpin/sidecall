@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Sidecall spike — options</title>
+    <!-- Must open in a full tab: the embedded chrome://extensions options dialog can't show the mic prompt reliably. -->
+    <meta name="manifest.open_in_tab" content="true" />
+    <style>body{font:14px system-ui;margin:2rem;max-width:40rem} button{font-size:14px;padding:.4rem .8rem}</style>
+  </head>
+  <body>
+    <h1>Microphone permission</h1>
+    <p>The side panel and the offscreen document can't (reliably) show a mic prompt, so grant it here once. The grant applies to the whole extension origin.</p>
+    <p>Current state: <b id="state">…</b></p>
+    <button id="grant">Grant microphone</button>
+    <pre id="out"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

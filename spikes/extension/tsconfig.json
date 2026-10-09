@@ -1,0 +1,8 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    // WXT's generated tsconfig enables noUncheckedIndexedAccess; DSP loops over
+    // typed arrays are unreadable with it, so it's off for this throwaway spike.
+    "noUncheckedIndexedAccess": false
+  }
+}

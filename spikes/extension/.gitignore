@@ -1,0 +1,11 @@
+node_modules/
+.output/
+.wxt/
+.venv/
+recordings/
+logs/
+profiles/
+*.log
+runs/
+# speech clip used by the echo test (root .gitignore excludes *.wav)
+!public/speech.wav
