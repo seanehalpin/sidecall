@@ -334,40 +334,100 @@ The command classifier is a pure function with unit tests.
 
 ## 8. Persistence
 
-- **Global:** `~/.sidecall/config.toml` and the pairing token.
+- **Global:** `~/.sidecall/config.toml`, holding `port`, `token`, `extension_id`, `talker_model`, `worker_model` and the `[repos]` origin → path table. Setting `SIDECALL_HOME` overrides `~/.sidecall`, for example in tests.
 - **Per repo:** see §6.2.
 
 ## 9. Protocol (WebSocket JSON)
 
 Envelope: `{ type, id, ts, payload }`. The daemon's Pydantic models are the source of truth. Export them to JSON Schema in `/protocol`, and generate the TypeScript types in the extension build.
 
+Field names are camelCase on the wire. The exact shapes live in `daemon/src/sidecall/protocol/` and `/protocol/sidecall.schema.json`.
+
 **Extension → daemon**
 - `hello {token, extVersion, origin, clockSample}`
-- `repo.map {origin, path}`
+- `pair.request {code}`
+- `repo.map {origin, path}`, `repo.browse {origin}`
 - `pick.add {Pick}`, `pick.remove {id}`, `picks.clear`
 - `user.text {text, pickIds}`
 - `call.start`, `call.end`, `call.mute {muted}`
 - `task.cancel {id}`, `task.reorder {ids}`
 - `approval.respond {id, allow}`
-- `settings.update {…}`
+- `settings.update {preset}`
 - `webrtc.offer {sdp}`, `webrtc.ice {candidate}`
 - `pong {seq}`
 
 **Daemon → extension**
 - `ping {seq}` (every 20 s; keeps the service worker alive, §5.6)
+- `pair.result {token}`
 - `welcome {repo, state, clockOffset}`
 - `repo.unknown {origin}`
-- `call.state {idle|connecting|listening|thinking|speaking}`
+- `call.state {state}` (idle | connecting | listening | thinking | speaking)
 - `transcript.partial {text}`
-- `transcript.final {turnId, role, text, pickIds}`
+- `transcript.final {turnId, role, text, pickIds, taskId?}`
 - `agent.text.delta {turnId, delta}`, `agent.text.done {turnId}`
 - `task.created {Task}`, `task.event {taskId, kind, text}`
 - `task.completed {taskId, summary, files}`, `task.failed {taskId, reason}`
-- `task.blocked {taskId, approval: {id, command, reason}}`
+- `task.blocked {taskId, approval: {id, taskId, command, reason}}`
+- `approval.resolved {id, allow}`
 - `queue.state {tasks}`
 - `notify {title, body, action}`
 - `webrtc.answer {sdp}`, `webrtc.ice {candidate}`
 - `error {code, message}`
+
+### 9.1 Connection, pairing and repo binding
+
+- **Endpoint:** the daemon listens on `ws://127.0.0.1:7823/ws`. The port is configurable as `port` in `config.toml`.
+- **Origin check:** at the WebSocket upgrade, the daemon rejects any `Origin` that isn't `chrome-extension://<id>`. The allowed ID comes from the pinned manifest key (§6.1) and is stored as `extension_id` in `config.toml`; its default is the ID of the key committed in `extension/`.
+- **Pairing:**
+  - The daemon creates a random `token` on first run and stores it in `config.toml`.
+  - `sidecall start` prints a 6-digit pairing code, valid for 10 minutes or until it is used.
+  - An extension without a token sends `pair.request {code}` as its first message and receives `pair.result {token}`, which it stores in `chrome.storage.local`.
+  - A wrong or expired code returns `error {code: "bad_pairing_code"}`.
+- **Hello:**
+  - Every connection must authenticate with `hello` before anything else, except `pair.request`.
+  - A bad token returns `error {code: "unauthorized"}` and closes the socket with code 4401.
+  - `clockOffset` in `welcome` is `daemon_now_ms − clockSample`.
+- **Repo binding:**
+  - `hello.origin` is the origin of the active tab, for example `http://localhost:5173`. Only `http://localhost:*` and `http://127.0.0.1:*` origins count; anything else is sent as `null`.
+  - A mapped origin gets `welcome`.
+  - An unmapped origin gets `repo.unknown {origin}`.
+  - A `null` origin gets `error {code: "no_origin"}`, and the connection stays authenticated.
+- **Origin changes:** when the active tab's origin changes, the extension sends `hello` again on the same socket, and the daemon rebinds the connection to the new repo and replies as above.
+- **Mapping a repo:**
+  - `repo.map` validates that the path is an existing directory, saves it to `config.toml` and replies with `welcome`. A bad path returns `error {code: "bad_path"}`.
+  - `repo.browse` opens a macOS folder picker via `osascript`. Choosing a folder behaves like `repo.map`; cancelling returns `error {code: "browse_cancelled"}`.
+- **Broadcasts:** a repo's events go to every authenticated connection currently bound to that repo.
+
+### 9.2 Turns, tasks and approvals
+
+**User turns**
+- `user.text` → the daemon appends a user entry and broadcasts `transcript.final {role: "user"}`.
+- The talker's reply streams as `agent.text.delta` under a new agent `turnId`, then `agent.text.done`, then `transcript.final {role: "agent"}` with the full text and the same `turnId`.
+- A new `user.text` while the talker is still replying interrupts that reply first.
+
+**Dispatch**
+- When the talker calls `dispatch_task`, the daemon sends `task.created`, then `queue.state`, then `transcript.final {role: "system", taskId}` (for example "Task queued: Red heading").
+
+**Worker progress**
+- While a task runs, the daemon sends `task.event` and keeps `queue.state` current. A task's status moves through queued → running → (blocked ↔ running) → completed, failed or cancelled.
+
+**Results**
+- On success the daemon sends `task.completed` or `task.failed`, then a system `transcript.final`, then `notify`.
+- The extension shows `notify` as a Chrome notification only when the rail isn't open.
+- Task results the talker hasn't seen yet are prepended to its next turn as a system note, so it never claims a change it hasn't heard about.
+
+**Approvals**
+- When a step needs approval, the daemon sends `task.blocked`, then `notify`.
+- The extension replies with `approval.respond`, and the daemon broadcasts `approval.resolved`, which removes the card.
+- Denying cancels that step only: the worker is told it was denied and carries on without it.
+
+**Cancel and reorder**
+- `task.cancel` on a queued task marks it cancelled. On the running task, it interrupts the worker.
+- `task.reorder` reorders queued tasks only.
+
+**Restart and reconnect**
+- `welcome.state` carries the queue (including tasks finished recently), pending approvals, the last 50 transcript entries and the settings.
+- On daemon restart, a task that was running goes back to the front of the queue as queued.
 
 ## 10. Repo layout
 
