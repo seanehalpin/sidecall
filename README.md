@@ -110,6 +110,7 @@ If a port is taken, set another one: `PORT=5273 pnpm dev`.
 
 - **"Port already in use" for a fixture.** Another dev server holds 5173 or 5174. Run it with `PORT=<other> pnpm dev`.
 - **Recording fails with `NotAllowedError`.** The mic hasn't been granted to the extension. Use **Open options (grant mic)** in the side panel and allow it there.
+- **The voice page is stuck on "connecting…".** Make sure you're running the latest `server.py`, which keeps WebRTC on 127.0.0.1 (the macOS firewall can block it on your network address), then restart it with Ctrl+C and `uv run python server.py`, and reload the page.
 - **The voice page connects but you hear nothing back.** Check that the terminal shows `models ready`, and that Chrome isn't muted for the tab.
 - **The voice agent cuts you off mid-sentence.** This is a known issue: pausing for about half a second can end your turn. A fix is planned for Milestone 3.
 - **Loading the extension fails after a code change.** Re-run `pnpm build`, then click the reload icon on the extension in `chrome://extensions`.

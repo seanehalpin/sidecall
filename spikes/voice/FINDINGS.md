@@ -209,6 +209,18 @@ That is about 340–360 ms from user speech onset to bot audio stopping. The bro
 - Pipecat warns when VAD `stop_secs` isn't 0.2.
 - The first aiortc connect attempt hit the 60 s ICE timeout. Every run after that connected immediately.
 
+**Real browser connections hung (found after the spike, now fixed).** In Chrome, the page stuck at "connecting…" and the server logged ICE "checking", then "Timeout establishing the connection" after 60 s. The automated test had used an aiortc client, never a real browser, which is why this wasn't caught.
+
+Cause:
+- aioice advertises only LAN and IPv6 host candidates (it skips 127.0.0.1).
+- Chrome's connectivity checks to 192.168.0.175 never reached Python: aioice debug logs showed zero inbound STUN requests.
+- A plain UDP test confirmed it. A datagram sent to the venv Python on 192.168.0.175 was dropped, while the same datagram on 127.0.0.1 arrived. This happened even though the macOS firewall lists this Python as "Allow incoming connections".
+- Chrome's own host candidates are mDNS `.local` names that aioice can't resolve, so there was no other path.
+
+Fix: `server.py` patches `aioice.ice.get_host_addresses` to return only `["127.0.0.1"]`. Verified in headless Chromium with a WAV fed as the mic:
+- The connection reached `connected` in about 100 ms.
+- The transcript was correct, and the bot replied.
+
 ## How to run
 
 ```bash

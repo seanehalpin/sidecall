@@ -15,6 +15,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import aioice.ice
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import FileResponse
@@ -35,6 +36,13 @@ from voice_services import Models, StubTalker, load_models
 
 HERE = Path(__file__).parent
 STATE: dict = {}
+
+# Offer only a loopback ICE candidate. aioice skips 127.0.0.1 by default and
+# advertises LAN/IPv6 addresses instead; inbound UDP to those can be dropped by
+# the macOS firewall (seen on the dev machine: browser checks never arrived and
+# ICE timed out after 60 s). Loopback isn't filtered, and the browser is always
+# on this machine, which also matches SPEC §6.1 (bind 127.0.0.1 only).
+aioice.ice.get_host_addresses = lambda use_ipv4, use_ipv6: ["127.0.0.1"]
 VAD_STOP_SECS = 0.2
 
 
@@ -190,4 +198,6 @@ async def ice_candidate(request: SmallWebRTCPatchRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=7860)
+    import os
+
+    uvicorn.run(app, host="localhost", port=int(os.environ.get("PORT", "7860")))

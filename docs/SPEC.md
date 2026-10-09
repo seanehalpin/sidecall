@@ -52,6 +52,8 @@ While looking at a local web prototype in Chrome, you point at elements and talk
 
 - **Control and data:** a WebSocket at `ws://127.0.0.1:<port>` between the extension and the daemon. Messages are defined in §9.
 - **Audio:** WebRTC between the offscreen document and the daemon (Pipecat SmallWebRTC transport). Signalling goes over the WebSocket.
+  - The daemon offers only a loopback ICE candidate (127.0.0.1). aioice normally skips loopback and advertises LAN and IPv6 addresses, and the macOS firewall can drop inbound UDP to Python on those even when Python is on its allow list. On the dev machine the connection hung at ICE "checking" until a 60 s timeout.
+  - The browser is always on the same machine, so loopback is sufficient, and it keeps media off the network, in line with §6.1.
 - **Target repo:** the daemon and Claude Code read and write files; the project's dev server reloads. The daemon does not start the dev server in v1.
 
 ## 5. Extension
