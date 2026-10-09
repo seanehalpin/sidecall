@@ -1,0 +1,50 @@
+[project]
+name = "sidecall"
+version = "0.1.0"
+description = "Sidecall daemon: voice- and pointer-driven prototyping through Claude Code"
+authors = [
+    { name = "Sean Halpin", email = "seanehalpin@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.2.164",
+    "pydantic>=2.13.5",
+    "starlette>=1.7.0",
+    "tomli-w>=1.2.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+sidecall = "sidecall.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.24,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: talks to Claude Code (costs usage); run with --integration"]

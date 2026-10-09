@@ -1,0 +1,2876 @@
+{
+  "$defs": {
+    "AgentTextDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AgentTextDeltaPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "agent.text.delta",
+          "default": "agent.text.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "AgentTextDelta",
+      "type": "object"
+    },
+    "AgentTextDeltaPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "delta": {
+          "title": "Delta",
+          "type": "string"
+        },
+        "turnId": {
+          "title": "Turnid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId",
+        "delta"
+      ],
+      "title": "AgentTextDeltaPayload",
+      "type": "object"
+    },
+    "AgentTextDone": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AgentTextDonePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "agent.text.done",
+          "default": "agent.text.done",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "AgentTextDone",
+      "type": "object"
+    },
+    "AgentTextDonePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "turnId": {
+          "title": "Turnid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId"
+      ],
+      "title": "AgentTextDonePayload",
+      "type": "object"
+    },
+    "Approval": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "taskId": {
+          "title": "Taskid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "taskId",
+        "command",
+        "reason"
+      ],
+      "title": "Approval",
+      "type": "object"
+    },
+    "ApprovalResolved": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ApprovalResolvedPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "approval.resolved",
+          "default": "approval.resolved",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "ApprovalResolved",
+      "type": "object"
+    },
+    "ApprovalResolvedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "title": "Allow",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "allow"
+      ],
+      "title": "ApprovalResolvedPayload",
+      "type": "object"
+    },
+    "ApprovalRespond": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ApprovalRespondPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "approval.respond",
+          "default": "approval.respond",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "ApprovalRespond",
+      "type": "object"
+    },
+    "ApprovalRespondPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "title": "Allow",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "allow"
+      ],
+      "title": "ApprovalRespondPayload",
+      "type": "object"
+    },
+    "Brief": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptanceCriteria": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Acceptancecriteria",
+          "type": "array"
+        },
+        "changes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Changes",
+          "type": "array"
+        },
+        "goal": {
+          "title": "Goal",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "outOfScope": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Outofscope",
+          "type": "array"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/Target"
+          },
+          "title": "Targets",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "goal",
+        "targets",
+        "changes",
+        "acceptanceCriteria",
+        "outOfScope",
+        "notes"
+      ],
+      "title": "Brief",
+      "type": "object"
+    },
+    "CallEnd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Empty"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "call.end",
+          "default": "call.end",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "CallEnd",
+      "type": "object"
+    },
+    "CallMute": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CallMutePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "call.mute",
+          "default": "call.mute",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "CallMute",
+      "type": "object"
+    },
+    "CallMutePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "muted": {
+          "title": "Muted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "muted"
+      ],
+      "title": "CallMutePayload",
+      "type": "object"
+    },
+    "CallStart": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Empty"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "call.start",
+          "default": "call.start",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "CallStart",
+      "type": "object"
+    },
+    "CallStateMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CallStatePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "call.state",
+          "default": "call.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "CallStateMsg",
+      "type": "object"
+    },
+    "CallStatePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "idle",
+            "connecting",
+            "listening",
+            "thinking",
+            "speaking"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "CallStatePayload",
+      "type": "object"
+    },
+    "ChainEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "file",
+        "line",
+        "column"
+      ],
+      "title": "ChainEntry",
+      "type": "object"
+    },
+    "ElementInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "altSelectors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Altselectors",
+          "type": "array"
+        },
+        "attributes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Attributes",
+          "type": "object"
+        },
+        "computedStyles": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Computedstyles",
+          "type": "object"
+        },
+        "outerHTML": {
+          "title": "Outerhtml",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "altSelectors",
+        "tag",
+        "attributes",
+        "text",
+        "outerHTML",
+        "rect",
+        "computedStyles"
+      ],
+      "title": "ElementInfo",
+      "type": "object"
+    },
+    "ElementSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "tag",
+        "text",
+        "rect"
+      ],
+      "title": "ElementSummary",
+      "type": "object"
+    },
+    "Empty": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "Empty",
+      "type": "object"
+    },
+    "ErrorMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ErrorPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "ErrorMsg",
+      "type": "object"
+    },
+    "ErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorPayload",
+      "type": "object"
+    },
+    "FrameworkInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "componentChain": {
+          "items": {
+            "$ref": "#/$defs/ChainEntry"
+          },
+          "title": "Componentchain",
+          "type": "array"
+        },
+        "name": {
+          "enum": [
+            "svelte",
+            "react",
+            "unknown"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "props": {
+          "default": null,
+          "title": "Props"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "source",
+        "componentChain",
+        "props"
+      ],
+      "title": "FrameworkInfo",
+      "type": "object"
+    },
+    "Hello": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/HelloPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "Hello",
+      "type": "object"
+    },
+    "HelloPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "clockSample": {
+          "title": "Clocksample",
+          "type": "number"
+        },
+        "extVersion": {
+          "title": "Extversion",
+          "type": "string"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token",
+        "extVersion",
+        "origin",
+        "clockSample"
+      ],
+      "title": "HelloPayload",
+      "type": "object"
+    },
+    "Notify": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/NotifyPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "notify",
+          "default": "notify",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "Notify",
+      "type": "object"
+    },
+    "NotifyPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "enum": [
+                "open",
+                "call"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body",
+        "action"
+      ],
+      "title": "NotifyPayload",
+      "type": "object"
+    },
+    "PageInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "colorScheme": {
+          "enum": [
+            "light",
+            "dark"
+          ],
+          "title": "Colorscheme",
+          "type": "string"
+        },
+        "consoleErrors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Consoleerrors",
+          "type": "array"
+        },
+        "route": {
+          "title": "Route",
+          "type": "string"
+        },
+        "scroll": {
+          "$ref": "#/$defs/Scroll"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "viewport": {
+          "$ref": "#/$defs/Viewport"
+        }
+      },
+      "required": [
+        "url",
+        "route",
+        "title",
+        "viewport",
+        "scroll",
+        "colorScheme",
+        "consoleErrors"
+      ],
+      "title": "PageInfo",
+      "type": "object"
+    },
+    "PairRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PairRequestPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pair.request",
+          "default": "pair.request",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "PairRequest",
+      "type": "object"
+    },
+    "PairRequestPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "PairRequestPayload",
+      "type": "object"
+    },
+    "PairResult": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PairResultPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pair.result",
+          "default": "pair.result",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "PairResult",
+      "type": "object"
+    },
+    "PairResultPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "token": {
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "title": "PairResultPayload",
+      "type": "object"
+    },
+    "Pick": {
+      "additionalProperties": false,
+      "properties": {
+        "createdAt": {
+          "title": "Createdat",
+          "type": "number"
+        },
+        "element": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ElementInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "framework": {
+          "$ref": "#/$defs/FrameworkInfo"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "element",
+            "region"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "page": {
+          "$ref": "#/$defs/PageInfo"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegionInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "repeat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Repeat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "screenshots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Screenshots"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "createdAt",
+        "kind",
+        "page",
+        "element",
+        "region",
+        "framework",
+        "repeat",
+        "screenshots"
+      ],
+      "title": "Pick",
+      "type": "object"
+    },
+    "PickAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Pick"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pick.add",
+          "default": "pick.add",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "PickAdd",
+      "type": "object"
+    },
+    "PickRemove": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PickRemovePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pick.remove",
+          "default": "pick.remove",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "PickRemove",
+      "type": "object"
+    },
+    "PickRemovePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "PickRemovePayload",
+      "type": "object"
+    },
+    "PicksClear": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Empty"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "picks.clear",
+          "default": "picks.clear",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "PicksClear",
+      "type": "object"
+    },
+    "Ping": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SeqPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "ping",
+          "default": "ping",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "Ping",
+      "type": "object"
+    },
+    "Pong": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SeqPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pong",
+          "default": "pong",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "Pong",
+      "type": "object"
+    },
+    "QueueState": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/QueueStatePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "queue.state",
+          "default": "queue.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "QueueState",
+      "type": "object"
+    },
+    "QueueStatePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "title": "Tasks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tasks"
+      ],
+      "title": "QueueStatePayload",
+      "type": "object"
+    },
+    "Rect": {
+      "additionalProperties": false,
+      "properties": {
+        "h": {
+          "title": "H",
+          "type": "number"
+        },
+        "w": {
+          "title": "W",
+          "type": "number"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "Rect",
+      "type": "object"
+    },
+    "RegionInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "elements": {
+          "items": {
+            "$ref": "#/$defs/ElementSummary"
+          },
+          "title": "Elements",
+          "type": "array"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        }
+      },
+      "required": [
+        "rect",
+        "elements"
+      ],
+      "title": "RegionInfo",
+      "type": "object"
+    },
+    "Repeat": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count",
+        "index"
+      ],
+      "title": "Repeat",
+      "type": "object"
+    },
+    "RepoBrowse": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RepoBrowsePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "repo.browse",
+          "default": "repo.browse",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "RepoBrowse",
+      "type": "object"
+    },
+    "RepoBrowsePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin"
+      ],
+      "title": "RepoBrowsePayload",
+      "type": "object"
+    },
+    "RepoInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "origin"
+      ],
+      "title": "RepoInfo",
+      "type": "object"
+    },
+    "RepoMap": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RepoMapPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "repo.map",
+          "default": "repo.map",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "RepoMap",
+      "type": "object"
+    },
+    "RepoMapPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "path"
+      ],
+      "title": "RepoMapPayload",
+      "type": "object"
+    },
+    "RepoState": {
+      "additionalProperties": false,
+      "properties": {
+        "approvals": {
+          "items": {
+            "$ref": "#/$defs/Approval"
+          },
+          "title": "Approvals",
+          "type": "array"
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings"
+        },
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "title": "Tasks",
+          "type": "array"
+        },
+        "transcript": {
+          "items": {
+            "$ref": "#/$defs/TranscriptEntry"
+          },
+          "title": "Transcript",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tasks",
+        "approvals",
+        "transcript",
+        "settings"
+      ],
+      "title": "RepoState",
+      "type": "object"
+    },
+    "RepoUnknown": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RepoUnknownPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "repo.unknown",
+          "default": "repo.unknown",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "RepoUnknown",
+      "type": "object"
+    },
+    "RepoUnknownPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin"
+      ],
+      "title": "RepoUnknownPayload",
+      "type": "object"
+    },
+    "Screenshots": {
+      "additionalProperties": false,
+      "properties": {
+        "crop": {
+          "title": "Crop",
+          "type": "string"
+        },
+        "viewport": {
+          "title": "Viewport",
+          "type": "string"
+        }
+      },
+      "required": [
+        "crop",
+        "viewport"
+      ],
+      "title": "Screenshots",
+      "type": "object"
+    },
+    "Scroll": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Scroll",
+      "type": "object"
+    },
+    "SeqPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq"
+      ],
+      "title": "SeqPayload",
+      "type": "object"
+    },
+    "Settings": {
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "default": "default",
+          "enum": [
+            "cautious",
+            "default",
+            "permissive"
+          ],
+          "title": "Preset",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "title": "Settings",
+      "type": "object"
+    },
+    "SettingsUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SettingsUpdatePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "settings.update",
+          "default": "settings.update",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "SettingsUpdate",
+      "type": "object"
+    },
+    "SettingsUpdatePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "anyOf": [
+            {
+              "enum": [
+                "cautious",
+                "default",
+                "permissive"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preset"
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "title": "SettingsUpdatePayload",
+      "type": "object"
+    },
+    "SourceLocation": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "title": "Column",
+          "type": "integer"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "line": {
+          "title": "Line",
+          "type": "integer"
+        },
+        "precision": {
+          "enum": [
+            "element",
+            "component"
+          ],
+          "title": "Precision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "column",
+        "precision"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Component"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "pickId": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pickid"
+        }
+      },
+      "required": [
+        "pickId",
+        "file",
+        "line",
+        "component",
+        "description"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "brief": {
+          "$ref": "#/$defs/Brief"
+        },
+        "createdAt": {
+          "title": "Createdat",
+          "type": "number"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finishedat"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "lastEvent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lastevent"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Startedat"
+        },
+        "status": {
+          "default": "queued",
+          "enum": [
+            "queued",
+            "running",
+            "blocked",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "brief",
+        "status",
+        "createdAt",
+        "startedAt",
+        "finishedAt",
+        "summary",
+        "files",
+        "error",
+        "lastEvent"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskBlocked": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskBlockedPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.blocked",
+          "default": "task.blocked",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskBlocked",
+      "type": "object"
+    },
+    "TaskBlockedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "approval": {
+          "$ref": "#/$defs/Approval"
+        },
+        "taskId": {
+          "title": "Taskid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "taskId",
+        "approval"
+      ],
+      "title": "TaskBlockedPayload",
+      "type": "object"
+    },
+    "TaskCancel": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskCancelPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.cancel",
+          "default": "task.cancel",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskCancel",
+      "type": "object"
+    },
+    "TaskCancelPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "TaskCancelPayload",
+      "type": "object"
+    },
+    "TaskCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskCompletedPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.completed",
+          "default": "task.completed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskCompleted",
+      "type": "object"
+    },
+    "TaskCompletedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "taskId": {
+          "title": "Taskid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "taskId",
+        "summary",
+        "files"
+      ],
+      "title": "TaskCompletedPayload",
+      "type": "object"
+    },
+    "TaskCreated": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Task"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.created",
+          "default": "task.created",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskCreated",
+      "type": "object"
+    },
+    "TaskEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskEventPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.event",
+          "default": "task.event",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskEvent",
+      "type": "object"
+    },
+    "TaskEventPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "status",
+            "tool",
+            "text",
+            "edit"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "taskId": {
+          "title": "Taskid",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "taskId",
+        "kind",
+        "text"
+      ],
+      "title": "TaskEventPayload",
+      "type": "object"
+    },
+    "TaskFailed": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskFailedPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.failed",
+          "default": "task.failed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskFailed",
+      "type": "object"
+    },
+    "TaskFailedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "taskId": {
+          "title": "Taskid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "taskId",
+        "reason"
+      ],
+      "title": "TaskFailedPayload",
+      "type": "object"
+    },
+    "TaskReorder": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskReorderPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "task.reorder",
+          "default": "task.reorder",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TaskReorder",
+      "type": "object"
+    },
+    "TaskReorderPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "title": "TaskReorderPayload",
+      "type": "object"
+    },
+    "TranscriptEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "pickIds": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Pickids",
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "agent",
+            "system"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "taskId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Taskid"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "turnId": {
+          "title": "Turnid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId",
+        "role",
+        "text",
+        "pickIds",
+        "ts",
+        "taskId"
+      ],
+      "title": "TranscriptEntry",
+      "type": "object"
+    },
+    "TranscriptFinal": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TranscriptFinalPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "transcript.final",
+          "default": "transcript.final",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TranscriptFinal",
+      "type": "object"
+    },
+    "TranscriptFinalPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "pickIds": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Pickids",
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "agent",
+            "system"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "taskId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Taskid"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "turnId": {
+          "title": "Turnid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId",
+        "role",
+        "text",
+        "pickIds",
+        "taskId"
+      ],
+      "title": "TranscriptFinalPayload",
+      "type": "object"
+    },
+    "TranscriptPartial": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TranscriptPartialPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "transcript.partial",
+          "default": "transcript.partial",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "TranscriptPartial",
+      "type": "object"
+    },
+    "TranscriptPartialPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TranscriptPartialPayload",
+      "type": "object"
+    },
+    "UserText": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/UserTextPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "user.text",
+          "default": "user.text",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "UserText",
+      "type": "object"
+    },
+    "UserTextPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "pickIds": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Pickids",
+          "type": "array"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "pickIds"
+      ],
+      "title": "UserTextPayload",
+      "type": "object"
+    },
+    "Viewport": {
+      "additionalProperties": false,
+      "properties": {
+        "dpr": {
+          "title": "Dpr",
+          "type": "number"
+        },
+        "h": {
+          "title": "H",
+          "type": "integer"
+        },
+        "w": {
+          "title": "W",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "w",
+        "h",
+        "dpr"
+      ],
+      "title": "Viewport",
+      "type": "object"
+    },
+    "WebRTCAnswer": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/WebRTCAnswerPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "webrtc.answer",
+          "default": "webrtc.answer",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "WebRTCAnswer",
+      "type": "object"
+    },
+    "WebRTCAnswerPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "sdp": {
+          "title": "Sdp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sdp"
+      ],
+      "title": "WebRTCAnswerPayload",
+      "type": "object"
+    },
+    "WebRTCIceIn": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/WebRTCIcePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "webrtc.ice",
+          "default": "webrtc.ice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "WebRTCIceIn",
+      "type": "object"
+    },
+    "WebRTCIceOut": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/WebRTCIcePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "webrtc.ice",
+          "default": "webrtc.ice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "WebRTCIceOut",
+      "type": "object"
+    },
+    "WebRTCIcePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Candidate"
+        }
+      },
+      "required": [
+        "candidate"
+      ],
+      "title": "WebRTCIcePayload",
+      "type": "object"
+    },
+    "WebRTCOffer": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/WebRTCOfferPayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "webrtc.offer",
+          "default": "webrtc.offer",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "WebRTCOffer",
+      "type": "object"
+    },
+    "WebRTCOfferPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "sdp": {
+          "title": "Sdp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sdp"
+      ],
+      "title": "WebRTCOfferPayload",
+      "type": "object"
+    },
+    "Welcome": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/WelcomePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "welcome",
+          "default": "welcome",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "Welcome",
+      "type": "object"
+    },
+    "WelcomePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "clockOffset": {
+          "title": "Clockoffset",
+          "type": "number"
+        },
+        "repo": {
+          "$ref": "#/$defs/RepoInfo"
+        },
+        "state": {
+          "$ref": "#/$defs/RepoState"
+        }
+      },
+      "required": [
+        "repo",
+        "state",
+        "clockOffset"
+      ],
+      "title": "WelcomePayload",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Container so both unions share one set of $defs.",
+  "properties": {
+    "client": {
+      "discriminator": {
+        "mapping": {
+          "approval.respond": "#/$defs/ApprovalRespond",
+          "call.end": "#/$defs/CallEnd",
+          "call.mute": "#/$defs/CallMute",
+          "call.start": "#/$defs/CallStart",
+          "hello": "#/$defs/Hello",
+          "pair.request": "#/$defs/PairRequest",
+          "pick.add": "#/$defs/PickAdd",
+          "pick.remove": "#/$defs/PickRemove",
+          "picks.clear": "#/$defs/PicksClear",
+          "pong": "#/$defs/Pong",
+          "repo.browse": "#/$defs/RepoBrowse",
+          "repo.map": "#/$defs/RepoMap",
+          "settings.update": "#/$defs/SettingsUpdate",
+          "task.cancel": "#/$defs/TaskCancel",
+          "task.reorder": "#/$defs/TaskReorder",
+          "user.text": "#/$defs/UserText",
+          "webrtc.ice": "#/$defs/WebRTCIceIn",
+          "webrtc.offer": "#/$defs/WebRTCOffer"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Hello"
+        },
+        {
+          "$ref": "#/$defs/PairRequest"
+        },
+        {
+          "$ref": "#/$defs/RepoMap"
+        },
+        {
+          "$ref": "#/$defs/RepoBrowse"
+        },
+        {
+          "$ref": "#/$defs/PickAdd"
+        },
+        {
+          "$ref": "#/$defs/PickRemove"
+        },
+        {
+          "$ref": "#/$defs/PicksClear"
+        },
+        {
+          "$ref": "#/$defs/UserText"
+        },
+        {
+          "$ref": "#/$defs/CallStart"
+        },
+        {
+          "$ref": "#/$defs/CallEnd"
+        },
+        {
+          "$ref": "#/$defs/CallMute"
+        },
+        {
+          "$ref": "#/$defs/TaskCancel"
+        },
+        {
+          "$ref": "#/$defs/TaskReorder"
+        },
+        {
+          "$ref": "#/$defs/ApprovalRespond"
+        },
+        {
+          "$ref": "#/$defs/SettingsUpdate"
+        },
+        {
+          "$ref": "#/$defs/WebRTCOffer"
+        },
+        {
+          "$ref": "#/$defs/WebRTCIceIn"
+        },
+        {
+          "$ref": "#/$defs/Pong"
+        }
+      ],
+      "title": "Client"
+    },
+    "server": {
+      "discriminator": {
+        "mapping": {
+          "agent.text.delta": "#/$defs/AgentTextDelta",
+          "agent.text.done": "#/$defs/AgentTextDone",
+          "approval.resolved": "#/$defs/ApprovalResolved",
+          "call.state": "#/$defs/CallStateMsg",
+          "error": "#/$defs/ErrorMsg",
+          "notify": "#/$defs/Notify",
+          "pair.result": "#/$defs/PairResult",
+          "ping": "#/$defs/Ping",
+          "queue.state": "#/$defs/QueueState",
+          "repo.unknown": "#/$defs/RepoUnknown",
+          "task.blocked": "#/$defs/TaskBlocked",
+          "task.completed": "#/$defs/TaskCompleted",
+          "task.created": "#/$defs/TaskCreated",
+          "task.event": "#/$defs/TaskEvent",
+          "task.failed": "#/$defs/TaskFailed",
+          "transcript.final": "#/$defs/TranscriptFinal",
+          "transcript.partial": "#/$defs/TranscriptPartial",
+          "webrtc.answer": "#/$defs/WebRTCAnswer",
+          "webrtc.ice": "#/$defs/WebRTCIceOut",
+          "welcome": "#/$defs/Welcome"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Welcome"
+        },
+        {
+          "$ref": "#/$defs/PairResult"
+        },
+        {
+          "$ref": "#/$defs/RepoUnknown"
+        },
+        {
+          "$ref": "#/$defs/CallStateMsg"
+        },
+        {
+          "$ref": "#/$defs/TranscriptPartial"
+        },
+        {
+          "$ref": "#/$defs/TranscriptFinal"
+        },
+        {
+          "$ref": "#/$defs/AgentTextDelta"
+        },
+        {
+          "$ref": "#/$defs/AgentTextDone"
+        },
+        {
+          "$ref": "#/$defs/TaskCreated"
+        },
+        {
+          "$ref": "#/$defs/TaskEvent"
+        },
+        {
+          "$ref": "#/$defs/TaskCompleted"
+        },
+        {
+          "$ref": "#/$defs/TaskFailed"
+        },
+        {
+          "$ref": "#/$defs/TaskBlocked"
+        },
+        {
+          "$ref": "#/$defs/ApprovalResolved"
+        },
+        {
+          "$ref": "#/$defs/QueueState"
+        },
+        {
+          "$ref": "#/$defs/Notify"
+        },
+        {
+          "$ref": "#/$defs/WebRTCAnswer"
+        },
+        {
+          "$ref": "#/$defs/WebRTCIceOut"
+        },
+        {
+          "$ref": "#/$defs/ErrorMsg"
+        },
+        {
+          "$ref": "#/$defs/Ping"
+        }
+      ],
+      "title": "Server"
+    }
+  },
+  "required": [
+    "client",
+    "server"
+  ],
+  "title": "SidecallProtocol",
+  "type": "object"
+}
