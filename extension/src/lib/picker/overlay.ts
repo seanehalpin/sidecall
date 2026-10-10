@@ -77,7 +77,11 @@ export class Overlay {
   private readonly pinNodes = new Map<number, { wrap: HTMLDivElement; box: HTMLDivElement; badge: HTMLDivElement }>();
   private visible = true;
 
-  constructor() {
+  private hintTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly HINT_HTML =
+    '<b>⌥ Sidecall</b> &nbsp;click to pick &middot; drag for a region &middot; ↑ ↓ parent / child &middot; Esc clears';
+
+  constructor(private readonly isActive: () => boolean = () => true) {
     this.host = document.createElement('div');
     this.host.id = OVERLAY_HOST_ID;
     const shadow = this.host.attachShadow({ mode: 'open' });
@@ -87,8 +91,7 @@ export class Overlay {
     this.root.append(this.pendingBox, this.hoverBox, this.hoverLabel, this.dragBox, this.hint);
     for (const n of [this.hoverBox, this.hoverLabel, this.dragBox, this.pendingBox, this.hint]) n.style.display = 'none';
     this.hint.dataset.role = 'hint';
-    this.hint.innerHTML =
-      '<b>⌥ Sidecall</b> &nbsp;click to pick &middot; drag for a region &middot; ↑ ↓ parent / child &middot; Esc clears';
+    this.hint.innerHTML = Overlay.HINT_HTML;
     this.hoverBox.dataset.role = 'hover';
     this.hoverLabel.dataset.role = 'hover-label';
     this.dragBox.dataset.role = 'drag';
@@ -98,6 +101,11 @@ export class Overlay {
 
   /** Attach (or re-attach, if the page removed it) to <html>. */
   mount(): void {
+    // A newer picker instance took over this page: never re-attach the stale overlay.
+    if (!this.isActive()) {
+      this.host.remove();
+      return;
+    }
     const parent = document.documentElement;
     if (parent && this.host.parentNode !== parent) parent.appendChild(this.host);
   }
@@ -132,8 +140,22 @@ export class Overlay {
 
   /** The "⌥ is held" hint bar: tells the user the picker is alive even over nothing. */
   showHint(on: boolean): void {
+    if (this.hintTimer) return; // a flashed message is showing
     if (on) this.mount();
     this.hint.style.display = on ? '' : 'none';
+  }
+
+  /** Show a message in the hint bar for a few seconds (e.g. a pick nobody answered). */
+  flashHint(text: string, ms = 6000): void {
+    this.mount();
+    if (this.hintTimer) clearTimeout(this.hintTimer);
+    this.hint.textContent = text;
+    this.hint.style.display = '';
+    this.hintTimer = setTimeout(() => {
+      this.hintTimer = null;
+      this.hint.innerHTML = Overlay.HINT_HTML;
+      this.hint.style.display = 'none';
+    }, ms);
   }
 
   setHoverLabel(label: string): void {

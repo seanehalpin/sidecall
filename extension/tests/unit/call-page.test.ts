@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CALL_PAGE_MIN_INTERVAL_MS, callPageSent, callPageStep, initialCallPageState, type CallPageEvent, type CallPageState } from '@/lib/call-page';
+import { CALL_PAGE_MIN_INTERVAL_MS, callPageSent, callPageStep, initialCallPageState, type CallPageEvent, type CallPageState } from '../../src/lib/call-page';
 
 function run(events: [CallPageEvent, number][]): string[] {
   let s: CallPageState = initialCallPageState;

@@ -8,6 +8,8 @@ import { guard, isDrag, rectFromPoints, rectOf } from './util';
 export type PickTarget = { kind: 'element'; el: Element } | { kind: 'region'; rect: Rect };
 
 export interface InputDeps {
+  /** False once a newer picker instance has taken over the page. */
+  isActive?(): boolean;
   overlay: Overlay;
   onPick(target: PickTarget): void;
   onEscape(): void;
@@ -61,23 +63,30 @@ export class InputController {
 
   install(win: Window = window): void {
     const opts = { capture: true } as const;
-    win.addEventListener('keydown', guard('keydown', (e) => this.onKeyDown(e)), opts);
-    win.addEventListener('keyup', guard('keyup', (e) => this.onKeyUp(e)), opts);
+    const live = <E extends Event>(fn: (e: E) => void) => (e: E) => {
+      if (this.deps.isActive && !this.deps.isActive()) return;
+      fn(e);
+    };
+    win.addEventListener('keydown', guard('keydown', live((e: KeyboardEvent) => this.onKeyDown(e))), opts);
+    win.addEventListener('keyup', guard('keyup', live((e: KeyboardEvent) => this.onKeyUp(e))), opts);
     win.addEventListener('blur', guard('blur', () => this.reset()), opts);
     document.addEventListener('visibilitychange', guard('visibility', () => this.reset()), opts);
-    win.addEventListener('mousemove', guard('mousemove', (e) => this.onMouseMove(e)), { capture: true, passive: true });
-    win.addEventListener('mousedown', guard('mousedown', (e) => this.onMouseDown(e)), opts);
-    win.addEventListener('mouseup', guard('mouseup', (e) => this.onMouseUp(e)), opts);
+    win.addEventListener('mousemove', guard('mousemove', live((e: MouseEvent) => this.onMouseMove(e))), { capture: true, passive: true });
+    win.addEventListener('mousedown', guard('mousedown', live((e: MouseEvent) => this.onMouseDown(e))), opts);
+    win.addEventListener('mouseup', guard('mouseup', live((e: MouseEvent) => this.onMouseUp(e))), opts);
     for (const type of INTERCEPTED) {
       if (type === 'mouseup') continue;
-      win.addEventListener(type, guard(type, (e: Event) => this.onSwallow(e as MouseEvent)), opts);
+      win.addEventListener(type, guard(type, live((e: Event) => this.onSwallow(e as MouseEvent))), opts);
     }
     for (const type of ['dragstart', 'selectstart'] as const) {
       win.addEventListener(
         type,
-        guard(type, (e: Event) => {
-          if (this.drag || this.altDown) e.preventDefault();
-        }),
+        guard(
+          type,
+          live((e: Event) => {
+            if (this.drag || this.altDown) e.preventDefault();
+          }),
+        ),
         opts,
       );
     }

@@ -963,7 +963,32 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener(() => {
     void browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+    void reinjectPicker();
   });
+
+  /**
+   * Chrome doesn't inject content scripts into tabs that were already open when the
+   * extension was installed or reloaded, and an old MAIN-world picker keeps running there
+   * with a dead bridge (hover works, picks vanish). Inject a fresh bridge and picker; the
+   * new picker takes over from any stale one (lib/picker/boot.ts).
+   */
+  async function reinjectPicker(): Promise<void> {
+    let tabs: Browser.tabs.Tab[] = [];
+    try {
+      tabs = await browser.tabs.query({ url: ['http://localhost/*', 'http://127.0.0.1/*'] });
+    } catch {
+      return;
+    }
+    for (const tab of tabs) {
+      if (tab.id === undefined || tab.discarded) continue;
+      try {
+        await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ['/content-scripts/picker-bridge.js'] });
+        await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ['/content-scripts/picker.js'], world: 'MAIN' });
+      } catch (err) {
+        console.warn('[sidecall] re-inject picker failed', tab.url, err);
+      }
+    }
+  }
 
   const ready = (async () => {
     void browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});

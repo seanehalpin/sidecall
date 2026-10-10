@@ -11,15 +11,18 @@ import { InputController, type PickTarget } from './input';
 import { Overlay } from './overlay';
 import { buildElementPick, buildRegionPick, reanchorFor } from './payload';
 import { PinRegistry } from './pins';
-import { displayPath, guard, warnOnce } from './util';
+import { OVERLAY_HOST_ID, displayPath, guard, warnOnce } from './util';
 
-const BOOT_KEY = Symbol.for('sidecall.picker.booted');
+// The newest picker instance in a page wins. After an extension reload Chrome doesn't
+// re-inject content scripts into open tabs, and the old MAIN-world picker keeps running as
+// page code while its bridge is dead; the worker re-injects a fresh copy, which takes over.
+const ACTIVE_KEY = Symbol.for('sidecall.picker.active');
 const PENDING_TTL_MS = 5000;
 const OVERLAY_ACK_FALLBACK_MS = 400;
 
 declare global {
   interface Window {
-    [BOOT_KEY]?: boolean;
+    [ACTIVE_KEY]?: string;
     /** Test/debug handle. */
     __sidecallPicker?: { pins: PinRegistry; input: InputController; overlay: Overlay };
   }
@@ -32,21 +35,23 @@ interface PendingPick {
 }
 
 export function bootPicker(): void {
-  if (window[BOOT_KEY]) return;
-  window[BOOT_KEY] = true;
+  const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  window[ACTIVE_KEY] = token;
+  // A previous instance's overlay goes; that instance stops drawing (see isActive below).
+  document.getElementById(OVERLAY_HOST_ID)?.remove();
   try {
-    run();
+    run(() => window[ACTIVE_KEY] === token);
   } catch (err) {
     warnOnce('boot', err);
   }
 }
 
-function run(): void {
+function run(isActive: () => boolean): void {
   installConsoleCapture();
   installDevtoolsShim();
   installHmrTracking();
 
-  const overlay = new Overlay();
+  const overlay = new Overlay(isActive);
   const pending = new Map<string, PendingPick>();
   let seq = 0;
   let channel: PageChannel;
@@ -60,6 +65,7 @@ function run(): void {
   });
 
   const input = new InputController({
+    isActive,
     overlay,
     onPick: (t) => void handlePick(t),
     onEscape: () => post({ t: 'escape' }),
@@ -82,12 +88,15 @@ function run(): void {
     const timer = setTimeout(() => {
       pending.delete(localId);
       overlay.showPending(null);
+      // No pin came back: the extension isn't listening (reloaded, or not connected to this app).
+      overlay.flashHint("Sidecall didn't get that pick. Check the side panel is connected to this app, or refresh the page.");
     }, PENDING_TTL_MS);
     pending.set(localId, { el: t.kind === 'element' ? t.el : null, regionDoc, timer });
     post({ t: 'pick', localId, draft: built.draft, anchor: built.anchor, rect: built.rect, viewport: built.viewport });
   }
 
   function onMessage(m: ExtToPage): void {
+    if (!isActive()) return;
     switch (m.t) {
       case 'pin-add': {
         const p = pending.get(m.localId);
@@ -136,6 +145,7 @@ function run(): void {
 
   // Layout: pins and hover follow scroll/resize/DOM change (coalesced to one rAF).
   const relayout = guard('layout', () => {
+    if (!isActive()) return;
     pins.requestLayout();
     input.refreshHover();
   });
@@ -147,6 +157,7 @@ function run(): void {
     if (!document.documentElement) return;
     const mo = new MutationObserver(
       guard('mutation', (records: MutationRecord[]) => {
+        if (!isActive()) return;
         if (records.every((r) => overlay.isOurs(r.target) || [...r.addedNodes, ...r.removedNodes].every((n) => overlay.isOurs(n)))) return;
         pins.requestLayout();
         pins.scheduleReanchor();
