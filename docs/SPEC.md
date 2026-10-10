@@ -351,6 +351,30 @@ Picks:
 [2] h3.sidebar-title — Sidebar — src/lib/Sidebar.svelte:22:5 (element) — padding 16px 24px
 ```
 
+
+### 6.10 Voice turns (Milestone 3)
+
+- **Talker in calls:** spoken turns use the repo's talker, with the same session, lock, task notes, Picks section and crops as typed turns.
+  - Spoken turns stream text straight through, without the typed-turn narration hold; the voice note allows a short (2–4 word) acknowledgement before the talker reads code.
+  - An interruption cancels TTS and calls `interrupt()`; the agent transcript records what was heard plus " …", and the talker is told what was heard on its next turn.
+  - Typed `user.text` during a call goes through the same serialised talker; typed replies during a call are shown, not spoken.
+- **Page context in calls:** `call.page {page}` is sent when the call starts listening, on a tab change, and when a new utterance begins (at most one every 2 s, bound-origin tabs only). A spoken turn's page is the latest call page, else the first pick's page, else the last typed turn's page.
+- **Pipeline:** STT → SegmentTap → user aggregator → TalkerProcessor → TTS → output → OutputTap.
+  - The TalkerProcessor groups sentences itself and flushes when the talker's text pauses, and at the first clause of a long opening sentence.
+  - STT trims trailing silence to 0.2 s, because Parakeet otherwise stretches the last word about 0.35 s late. Segment times come from a sample clock, not frame arrival.
+  - The talker connects when the call connects.
+- **Measured (server side, haiku):**
+  - Median 1.2 s and p90 1.5 s from end of speech to first audio.
+  - Barge-in about 355 ms at VAD `start_secs` 0.2 (`SIDECALL_VAD_START_SECS` overrides; 0.15 gives about 308 ms).
+- **Pick binding:**
+  - Constants: a 3 s pre-speech window, 1.5 s continuation, a 1 s hold after a pick, and `LATE_PICK_MS` = 1 s.
+  - A pick reaching the daemon late (made during the turn or up to 1 s after it) re-submits the turn.
+  - A merged turn re-sends `transcript.final` with the same turnId, which replaces the entry.
+- **Announcer:**
+  - During a call, task results are spoken after 1.2 s of quiet, batched by priority, instead of `notify`. Approvals also notify with action "open".
+  - With no call, results notify with action "call"; clicking starts a call that opens with a summary.
+  - Any talker turn marks the notes it carried as seen.
+
 ## 7. Permissions and autonomy
 
 **Default preset**
