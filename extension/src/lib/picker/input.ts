@@ -19,6 +19,22 @@ export interface InputDeps {
   onHoverChange?(el: Element | null): void;
 }
 
+/** A wrapper this large (of the viewport) is skipped when something smaller sits under the cursor. */
+const HUGE_FRACTION = 0.85;
+
+/**
+ * Which element to hover from the stack under the cursor (topmost first). Page-sized wrappers
+ * (app shells, full-screen containers) would highlight the whole page, which looks like nothing
+ * happened, so prefer the first element that isn't one. Falls back to the topmost.
+ */
+export function chooseTarget<T>(stack: readonly T[], areaOf: (el: T) => number, viewportArea: number): T | null {
+  const first = stack[0];
+  if (first === undefined) return null;
+  const limit = viewportArea * HUGE_FRACTION;
+  for (const el of stack) if (areaOf(el) < limit) return el;
+  return first;
+}
+
 const INTERCEPTED = ['pointerdown', 'pointerup', 'mouseup', 'click', 'dblclick', 'auxclick'] as const;
 
 /** Tag.class fallback label. */
@@ -73,7 +89,7 @@ export class InputController {
   }
 
   private reset(): void {
-    this.altDown = false;
+    this.setAlt(false);
     this.drag = null;
     this.deps.overlay.showDrag(null);
     this.clearHover();
@@ -81,7 +97,7 @@ export class InputController {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Alt') {
-      this.altDown = true;
+      this.setAlt(true);
       if (this.last) this.hoverAt(this.last.x, this.last.y);
       return;
     }
@@ -100,7 +116,7 @@ export class InputController {
 
   private onKeyUp(e: KeyboardEvent): void {
     if (e.key !== 'Alt') return;
-    this.altDown = false;
+    this.setAlt(false);
     if (!this.drag) this.clearHover();
   }
 
@@ -116,17 +132,26 @@ export class InputController {
       return;
     }
     if (e.altKey) {
-      this.altDown = true;
+      if (!this.altDown) this.setAlt(true);
       this.hoverAt(e.clientX, e.clientY);
-    } else if (this.shown) {
-      this.altDown = false;
+    } else if (this.altDown || this.shown) {
+      this.setAlt(false);
       this.clearHover();
     }
   }
 
   private elementAt(x: number, y: number): Element | null {
-    const el = document.elementFromPoint(x, y);
-    return el && !this.deps.overlay.isOurs(el) ? el : null;
+    const stack = document.elementsFromPoint(x, y).filter((e) => !this.deps.overlay.isOurs(e) && e !== document.documentElement);
+    const area = (el: Element): number => {
+      const r = el.getBoundingClientRect();
+      return r.width * r.height;
+    };
+    return chooseTarget(stack, area, window.innerWidth * window.innerHeight);
+  }
+
+  private setAlt(down: boolean): void {
+    this.altDown = down;
+    this.deps.overlay.showHint(down);
   }
 
   private hoverAt(x: number, y: number): void {
@@ -170,7 +195,7 @@ export class InputController {
     if (!e.altKey || e.button !== 0) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    this.altDown = true;
+    this.setAlt(true);
     const under = this.elementAt(e.clientX, e.clientY);
     // ↑/↓ may have moved the selection off the element under the pointer.
     const target = this.path && under && originOf(this.path) === under ? currentOf(this.path) : under;
