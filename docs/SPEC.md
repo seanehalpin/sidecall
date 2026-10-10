@@ -68,8 +68,15 @@ Top to bottom:
 2. **Approvals:** pinned cards awaiting approve or deny.
 3. **Transcript:** interleaved entries — user (spoken or typed), agent, and system events (task dispatched, completed, failed). Pick markers render as inline chips; hovering a chip highlights its pin on the page.
 4. **Task queue (collapsible):** the running task with a live status line, plus queued tasks. Drag to reorder; cancel.
-5. **Pick tray:** chips for the current turn's picks. Remove individually or clear all.
-6. **Composer:** text input. A pick made while the composer is focused inserts a chip at the cursor. Enter sends. Shows mic state.
+5. **Pick tray:** chips for the live picks, between the task queue and the composer. Each shows `[n]` and the component (or tag.class), with a tooltip of file:line, precision and repeat info.
+   - Hovering a chip highlights its pin on the page.
+   - Clicking a chip inserts `[n]` into the composer at the cursor.
+   - Chips can be removed individually, or all at once with "Clear all". Picks from earlier turns show dimmed.
+   - `[n]` markers in sent messages render as inline pills in the transcript, with the same tooltip.
+6. **Composer:** a plain textarea. Enter sends. A picks hint shows under it while picks exist.
+   - New picks go to the tray rather than into the composer: clicking on the page blurs the side panel, so the composer is never focused when a pick lands.
+   - Inline chips inside the text were dropped because a textarea can't hold them.
+   - Voice (mic state) arrives in Milestone 3.
 
 ### 5.2 Picker
 
@@ -88,8 +95,13 @@ Top to bottom:
 
 - The overlay lives in a shadow-DOM root at the highest z-index. It sets `pointer-events: none` except while ⌥ is held. Normal page clicks are never intercepted.
 - Pins are numbered badges anchored to element rects. They update on scroll, resize and DOM mutation.
-- Pin IDs are per-session incrementing integers.
-- **Re-anchoring:** after an HMR update or reload, re-resolve each pin by source location, then selector, then text fingerprint. Mark it stale if none match.
+- Pin IDs are per-session incrementing integers, assigned by the service worker and persisted in `chrome.storage.session`.
+- Input is intercepted only while ⌥ is held: window-level capture listeners stop the event, so ⌥-click never submits a form, toggles a button or follows a link. Plain clicks are never touched. ↑/↓ are handled only while ⌥ is held over a hovered element.
+- The picker posts `ready` at DOMContentLoaded, after re-sending its handshake. The nonce is a stray-message guard, not a secret: any script on the page can read it, which is accepted because the page being prototyped is the user's own.
+- `Anchor.region` (for region picks) is in document coordinates (viewport rect plus scroll at pick time), so region pins follow scrolling.
+- **Re-anchoring:** after an HMR update or reload, re-resolve each pin by source location (plus its index among elements sharing that source), then selector, then text fingerprint. Mark it stale if none match.
+  - DOM mutations are debounced (about 120 ms). After a full reload the worker restores pins from the stored anchors, and an unmatched pin only becomes stale after a 4 s grace period (it may not have rendered yet).
+  - Verified on all three fixtures: pins stay on the same element across an HMR edit, and re-anchor within about 100 ms after a reload.
 
 ### 5.3 Pick payload
 
@@ -129,7 +141,10 @@ type ElementInfo = {
 ```
 
 - **Curated computed styles:** display, position, flex and grid properties, gap, margin, padding, width, height, font-family, font-size, font-weight, line-height, letter-spacing, color, background-color, border, border-radius, box-shadow, opacity, z-index.
-- **Screenshots:** the service worker captures with `chrome.tabs.captureVisibleTab`, then crops to the element rect plus a margin. A viewport copy gets the element outlined. Encode as WebP or PNG and upload to the daemon over HTTP with the auth token.
+- **Screenshots:** the service worker asks the page to hide its overlay (and waits for the page's ack, up to 500 ms), then calls `chrome.tabs.captureVisibleTab` once.
+  - From that single capture it derives a **crop** (the element or region rect plus a 16 px margin, clipped to the viewport) and a **viewport copy** downscaled to at most 1568 px with the element outlined. The picker's own pins and highlights aren't in either image.
+  - Both are encoded as JPEG (quality 80) and uploaded to the daemon over HTTP with the auth token. The pick is sent with `screenshots: null` if capture or upload fails, so a pick is never lost.
+  - Captures are spaced at least 600 ms apart (Chrome limits them to about two a second). Crop and outline math use one uniform scale (`bitmap width / viewport width`).
 - **Console errors:** the picker wraps `console.error`, `window.onerror` and `unhandledrejection` at document_start into a ring buffer.
 
 ### 5.4 Source resolution
@@ -137,14 +152,14 @@ type ElementInfo = {
 **Svelte 5**
 - Read `el.__svelte_meta.loc` → `{ file, line, column }` with precision `element`.
 - Walk `__svelte_meta.parent` for the chain. Entry types include component, each, if, await, key and render. The `parent` chain requires svelte ≥ 5.35.1; older versions give `loc` only.
-- If the element has no meta, walk up DOM ancestors until one does.
+- If the element has no meta, walk up DOM ancestors until one does. The same fallback applies to React: when the target has no framework metadata of its own, the nearest ancestor's source is used with precision `component`.
 - Chain entries point at where the tag or block is written, i.e. in the *parent* file. Drop entries under `node_modules/` (SvelteKit's root and layout).
 - Only the major version is exposed at runtime (`window.__svelte.v`).
 
 **React**
 - Use bippy to get the fiber from the host element, then always apply `getLatestFiber()`. Without it, the fiber can be the stale alternate after an update.
 - React 17/18: use `_debugSource` on the nearest fiber that has one → precision `element`.
-- React 19: `_debugSource` was removed. Resolve the host fiber's `_debugStack` (the `jsxDEV` call site of that element) through the dev server's source map, using bippy `getSource` → precision `element`.
+- React 19: `_debugSource` was removed. Resolve the host fiber's `_debugStack` (the `jsxDEV` call site of that element) through the dev server's source map → precision `element`. (The implementation decodes the source map itself with `source-map-js` and its own stack parser, cached per module URL; the spike found this agrees with bippy's `getSource` on every pick.)
   - React 19 does not refresh `_debugStack` when it reuses a fiber after Fast Refresh. Prefer the latest element's `_debugStack` from the parent host fiber's `memoizedProps.children`.
   - If the frame's module version (`?t=`) is older than the latest HMR import of that file, keep the file and downgrade to precision `component`.
 - Build the component chain by walking `fiber.return` and keeping composite fibers. Read props from `memoizedProps`.
@@ -156,6 +171,11 @@ type ElementInfo = {
 **Path normalisation (daemon side)**
 - Map paths to repo-relative paths. Inputs arrive in three forms: project-relative (Svelte), absolute filesystem paths (React ≤18) and dev-server URLs with `?t=` and similar query strings (React 19). Verify the file exists. If it doesn't, drop `source` and keep the chain.
 - Normalise columns to 1-based. Svelte and React 19 report 0-based columns; React 18 reports 1-based.
+- **Specifics (daemon, once, on `pick.add`):**
+  - Accepted forms: project-relative paths, absolute filesystem paths, dev-server URLs (query and fragment dropped, percent-decoded), root-relative URL paths, `file://`, and Vite's `/@fs/<abs>` and `/@id/` forms.
+  - Symlinks and `..` are resolved. A path outside the repo, under `node_modules`, or that doesn't exist yields no source.
+  - When `source` fails verification it is set to null, and the chain entry keeps its name with file, line and column nulled. Chain entries under `node_modules` are dropped.
+  - Column +1 for Svelte and React ≥19; React ≤18 and unknown are unchanged.
 
 **Repeat detection**
 - Count elements on the page that share the same source location. The key per framework:
@@ -228,7 +248,10 @@ Python 3.12, managed with uv. Main dependencies: `pipecat-ai` (with local and ML
 - **Custom tools** (in-process SDK MCP server; JSON Schemas generated from Pydantic, with `$defs` hoisted to the root of each tool schema, because nested `$defs` break validation in the CLI):
   - `dispatch_task(brief: Brief) -> task_id`
   - `list_tasks()`, `get_task_status(id)`, `cancel_task(id)`, `reorder_tasks(ids)`
-  - `get_pick(id)`: the full payload, when the inline summary isn't enough
+  - `get_pick(id)`: the full normalised payload as JSON (camelCase wire names), when the inline summary isn't enough; an error if the id is unknown or was cleared
+- **Pick summaries** in the turn use the format `[n] tag#id.class — Component — file:line:col (precision) — repeated N×, instance k — key styles`. A region is `[n] region WxH at (x,y) — contains: …`. A missing source reads `source unknown`, and an id the daemon no longer holds reads `[n] (no longer available)`. `instance k` is the 0-based `repeat.index` plus one.
+- **Crop screenshots** go as image blocks labelled `[n] crop`, up to 6 images per turn including the page screenshot.
+- **Repeated picks:** when a pick has `repeat.count > 1`, the talker treats it as one instance of a repeated template and changes the shared template or component, unless the user says "just this one".
   - `request_undo()`: queues a worker task asking it to undo its last change
 - **Page context:** each turn starts with a page line (`Page: "<title>" — <url> (route …, viewport …)`) and carries the screenshot as an image block.
   - The talker uses them to work out which route file and element the user means, and prefers changing what's on that page.
@@ -263,6 +286,9 @@ class Brief(BaseModel):
   - `can_use_tool` receives the "ask" cases and awaits the user's approval. It has no timeout. Never wait inside the hook, because hooks time out after 60 s.
 - One persistent session, so follow-ups ("do the same on the detail view") have context. Resume across days.
 - The brief is rendered into a prompt together with the full pick payloads and both screenshots per pick, plus a "Page the user was looking at" section and that page's screenshot from `Task.page`. The worker scopes the change to that page unless the brief says otherwise.
+  - **Task snapshots:** on dispatch, `Task.pickIds` is the brief's target pick ids plus the turn's picks (existing ones only). The Pick objects are snapshotted to `<repo state>/tasks/<task_id>/picks.json`, and the worker loads them when it runs, so `picks.clear`, id reuse and daemon restarts can't change a queued task.
+  - **Pick payload in the prompt:** each pick is rendered fully and compactly under "Picked elements" (selector and alternates, tag, attributes, text, trimmed outerHTML, all computed styles, framework and component chain with file:line:col, props, repeat, page). For a repeated pick the worker edits the template that renders all instances, not one copy, and leaves unrelated instances and pages alone.
+  - **Images:** the page screenshot first, then for the first 6 picks both screenshots (crop, then viewport), then crops only, with an overall cap of 20.
 - The worker keeps Claude Code's `claude_code` preset system prompt and appends Sidecall's rules: keep changes minimal, never push, don't start dev servers, and end with a short summary.
 - Streamed SDK messages become `task.event` messages (for example "editing src/lib/Card.svelte").
 - On result: a summary of what changed plus files touched → `task.completed`. On error → `task.failed` with the reason.
@@ -311,8 +337,11 @@ SmallWebRTC in → STT: Parakeet TDT 0.6B v3 (parakeet-mlx, offline per VAD segm
   - If the user resumes within about 1.5 s of a turn end, and the talker hasn't produced audio yet (or only a few words), merge the continuation into the previous turn and re-submit it with the same window, picks and markers, rather than sending a second user message.
   - While a pick is in progress, or within about 1 s after one, don't end the turn on Smart Turn alone.
   - These thresholds need tuning against real speech.
-- **Typed turns:** chips inserted at the cursor are the markers. Picks made while the composer is unfocused and no one is speaking go to the tray and attach to the next turn.
+- **Typed turns:** picks go to the tray; clicking a chip inserts its `[n]` marker, and typing `[n]` works too. The service worker, not the rail, decides a turn's `pickIds`: every live pick that isn't dimmed, plus any `[n]` referenced in the text that exists.
 - **After a turn:** picks stay referenceable by number (dimmed) until the task they belong to is dispatched or the user clears them.
+  - The dispatched `Task` lists them in `pickIds` (the brief's target picks plus the turn's), and the extension then removes them from the tray and the page.
+  - Esc on the page removes only the current turn's picks; "Clear all" in the tray clears everything (`picks.clear`).
+  - The daemon keeps picks in memory per repo (capped at 100, newest wins on a duplicate id). On reconnect the extension re-sends every live pick.
 
 Example of what the talker receives:
 
@@ -360,7 +389,7 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
 - `hello {token, extVersion, origin, clockSample}`
 - `pair.request {code}`
 - `repo.map {origin, path}`, `repo.browse {origin}`
-- `pick.add {Pick}`, `pick.remove {id}`, `picks.clear`
+- `pick.add {Pick}`, `pick.remove {id}`, `picks.clear` (none gets a reply; `remove` of an unknown id is a no-op)
 - `user.text {text, pickIds, page}` (page context, §5.6)
 - `call.start`, `call.end`, `call.mute {muted}`
 - `task.cancel {id}`, `task.reorder {ids}`
