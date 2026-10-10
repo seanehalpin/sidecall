@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'wxt';
 
 // Pinned public key: keeps the extension ID stable across unpacked installs, so
@@ -11,6 +12,15 @@ export default defineConfig({
   modules: ['@wxt-dev/module-svelte'],
   // `pnpm dev` only builds and watches; load the output into your own Chrome.
   webExt: { disabled: true },
+  vite: () => ({
+    resolve: {
+      alias: {
+        // bippy's root entry imports `react` for a hook the picker never uses; keep React out
+        // of the content-script bundle.
+        react: fileURLToPath(new URL('./src/lib/picker/stubs/react-stub.js', import.meta.url)),
+      },
+    },
+  }),
   manifest: {
     name: 'Sidecall',
     description: 'Prototype by conversation: point, talk, and let Claude Code edit your local app.',

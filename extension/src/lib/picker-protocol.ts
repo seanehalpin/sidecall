@@ -29,7 +29,7 @@ export interface Anchor {
   textFingerprint: string;
   /** Index among elements sharing the same source location, if any (0-based). */
   repeatIndex: number | null;
-  /** For region picks: the rect it covered, when no element applies. */
+  /** For region picks: the rect it covered, when no element applies. In DOCUMENT coordinates (viewport rect + scroll at pick time), so the pin follows scrolling. */
   region: Rect | null;
 }
 

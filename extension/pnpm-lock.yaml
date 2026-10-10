@@ -7,6 +7,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      bippy:
+        specifier: 0.7.3
+        version: 0.7.3(@types/react@19.3.0)(react@19.3.0)
+      source-map-js:
+        specifier: 1.2.2
+        version: 1.2.2
     devDependencies:
       '@types/node':
         specifier: ^25.9.9
@@ -17,6 +24,9 @@ importers:
       '@wxt-dev/module-svelte':
         specifier: ^2.0.5
         version: 2.0.5(svelte@5.57.2)(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0))(wxt@0.21.4(rolldown@1.2.13)(typescript@5.9.3)(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0)))
+      happy-dom:
+        specifier: ^20.14.5
+        version: 20.14.5
       json-schema-to-typescript:
         specifier: ^16.0.0
         version: 16.0.0
@@ -34,7 +44,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^5.0.3
-        version: 5.0.3(@types/node@25.9.9)(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0))
+        version: 5.0.3(@types/node@25.9.9)(happy-dom@20.14.5)(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0))
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -249,6 +259,17 @@ packages:
   '@types/node@25.9.9':
     resolution: {integrity: sha512-b4e2xxj/yMeT2hNlD6x7zNFiQK2Dlmkb9CQ6v3/1G2RezKN4YS2lcEv8lzGm1mhs4f2lM4yNAMI/zUDBZBBt7w==}
 
+  '@types/react-reconciler@0.33.1':
+    resolution: {integrity: sha512-0kF59ji2mKuHUd5wytHSpmORybMYVerJvq0K10pz9ZFoOlJ3e+w1LBjLshWpCrokeyQOioRodNbO4PH4ddvRfg==}
+    peerDependencies:
+      '@types/react': '*'
+
+  '@types/react@19.3.0':
+    resolution: {integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==}
+
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
   '@types/ws@8.18.2':
     resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
@@ -315,9 +336,18 @@ packages:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
 
+  bippy@0.7.3:
+    resolution: {integrity: sha512-C3yYBkcthd9kMXJwwwR69+ICGruw+R/Mcoq1LqsoscEoPe1OshyhYjMtYmtpoDSiJX40a867qhG4TT7g4mMIdQ==}
+    peerDependencies:
+      react: '>=16.0.0'
+
   boolbase@2.0.0:
     resolution: {integrity: sha512-DkVaaQHymRhpYEYo9x1oo7Q7B0Y6KJUsjm3c9eTyFDby4MHLBTwZ6ZDWBel5zrYxj1WsZgC5oLpiz+93MluXeA==}
     engines: {node: '>=20.19.0'}
+
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
 
   c12@3.3.4:
     resolution: {integrity: sha512-cM0ApFQSBXuourJejzwv/AuPRvAxordTyParRVcHjjtXirtkzM0uK2L9TTn9s0cXZbG7E55jCivRQzoxYmRAlA==}
@@ -384,6 +414,9 @@ packages:
 
   cssom@0.5.0:
     resolution: {integrity: sha512-iKuQcq+NdHqlAcwUY0o/HL69XQrUaQdMjmStJ8JFmUaiiQErlhrmuigkg/CU4E2J0IyUKUrMAgl36TvN67MqTw==}
+
+  csstype@3.2.3:
+    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
   deepmerge@4.3.1:
     resolution: {integrity: sha512-3sUqbMEc77XqpdNO7FRyRog+eW3ph+GYCbj+rK+uYyRMuwsVy0rMiVtPn+QJlKFvWP/1PYpapqYn0Me2knFn+A==}
@@ -515,6 +548,10 @@ packages:
   giget@3.3.1:
     resolution: {integrity: sha512-r+mvuDjrjMpsdw46Kmeydb8bdHm7wOKw8wNBtTndkjbPjgAp5oUJUxRE76wZFknxIPokfWvep2qSXK37aXE6zg==}
     hasBin: true
+
+  happy-dom@20.14.5:
+    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
+    engines: {node: '>=20.0.0'}
 
   hookable@6.1.2:
     resolution: {integrity: sha512-+abwxtiEA52GCVIsQqut3S/uKTbUwYIp4Pe/vv+6py5XiXBCqMZHg6pA6Y5qhgLSEys0/cYuPbO0z1QFj5ZCmg==}
@@ -766,6 +803,10 @@ packages:
   rc9@3.1.0:
     resolution: {integrity: sha512-ufjkNVzbRHKcCOmTahZkmVsyc3W+MSk3jY03m+a7tGHkIsdVMG9l10/3HvFbWkkKzY5VFp3pkRsIo/UYgmFL7Q==}
 
+  react@19.3.0:
+    resolution: {integrity: sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==}
+    engines: {node: '>=0.10.0'}
+
   readdirp@4.1.2:
     resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
     engines: {node: '>= 14.18.0'}
@@ -1007,6 +1048,10 @@ packages:
   webpack-virtual-modules@0.6.2:
     resolution: {integrity: sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ==}
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   why-is-node-running@3.2.1:
     resolution: {integrity: sha512-Tb2FUhB4vUsGQlfSquQLYkApkuPAFQXGFzxWKHHumVz2dK+X1RUm/HnID4+TfIGYJ1kTcwOaCk/buYCEJr6YjQ==}
     engines: {node: '>=20.11'}
@@ -1207,6 +1252,16 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
+  '@types/react-reconciler@0.33.1(@types/react@19.3.0)':
+    dependencies:
+      '@types/react': 19.3.0
+
+  '@types/react@19.3.0':
+    dependencies:
+      csstype: 3.2.3
+
+  '@types/whatwg-mimetype@3.0.2': {}
+
   '@types/ws@8.18.2':
     dependencies:
       '@types/node': 25.9.9
@@ -1267,7 +1322,18 @@ snapshots:
 
   axobject-query@4.1.0: {}
 
+  bippy@0.7.3(@types/react@19.3.0)(react@19.3.0):
+    dependencies:
+      '@types/react-reconciler': 0.33.1(@types/react@19.3.0)
+      react: 19.3.0
+    transitivePeerDependencies:
+      - '@types/react'
+
   boolbase@2.0.0: {}
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 25.9.9
 
   c12@3.3.4(magicast@0.5.5):
     dependencies:
@@ -1333,6 +1399,8 @@ snapshots:
   css-what@8.0.0: {}
 
   cssom@0.5.0: {}
+
+  csstype@3.2.3: {}
 
   deepmerge@4.3.1: {}
 
@@ -1428,6 +1496,19 @@ snapshots:
   get-caller-file@2.0.5: {}
 
   giget@3.3.1: {}
+
+  happy-dom@20.14.5:
+    dependencies:
+      '@types/node': 25.9.9
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.2
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.22.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   hookable@6.1.2: {}
 
@@ -1646,6 +1727,8 @@ snapshots:
       defu: 6.1.7
       destr: 2.0.5
 
+  react@19.3.0: {}
+
   readdirp@4.1.2: {}
 
   readdirp@5.1.1: {}
@@ -1814,7 +1897,7 @@ snapshots:
     optionalDependencies:
       vite: 8.3.3(@types/node@25.9.9)(jiti@2.7.0)
 
-  vitest@5.0.3(@types/node@25.9.9)(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0)):
+  vitest@5.0.3(@types/node@25.9.9)(happy-dom@20.14.5)(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.0.3(vite@8.3.3(@types/node@25.9.9)(jiti@2.7.0))
@@ -1832,10 +1915,13 @@ snapshots:
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 25.9.9
+      happy-dom: 20.14.5
     transitivePeerDependencies:
       - msw
 
   webpack-virtual-modules@0.6.2: {}
+
+  whatwg-mimetype@3.0.0: {}
 
   why-is-node-running@3.2.1: {}
 
