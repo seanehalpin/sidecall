@@ -565,6 +565,7 @@ export interface Task {
   id: string;
   lastEvent: string | null;
   page: PageContext | null;
+  pickIds: number[];
   startedAt: number | null;
   status: 'queued' | 'running' | 'blocked' | 'completed' | 'failed' | 'cancelled';
   summary: string | null;

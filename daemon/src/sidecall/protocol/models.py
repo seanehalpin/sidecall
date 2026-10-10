@@ -95,6 +95,8 @@ class Task(Model):
     files: list[str] = Field(default_factory=list[str])
     error: str | None = None
     last_event: str | None = None
+    # Picks (SPEC §5.3) this task was dispatched with: the turn's picks plus any the brief targets.
+    pick_ids: list[int] = Field(default_factory=list[int])
     page: PageContext | None = None
     """The page of the user turn that dispatched this task."""
 
