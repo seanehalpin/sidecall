@@ -6,15 +6,15 @@ The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.m
 
 ## Status
 
-**Milestone 2 is built: you can ⌥-click elements on your page, refer to them as `[1]`, `[2]`, and Claude makes the change.** Voice arrives in Milestone 3.
+**Milestone 3 is built: talk to the agent on a voice call while ⌥-clicking elements, and it hears "make this match that" with `[1]` and `[2]` in the right places.** Settings and persistence (Milestone 4) are next.
 
 | Milestone | What you get | Status |
 |---|---|---|
 | 0. Spikes | Each risky piece proven on its own | ✅ Done ([M0 notes](docs/milestones/M0.md)) |
 | 1. Daemon core and text rail | Type a change in the side panel; Claude makes it | ✅ Done ([M1 notes](docs/milestones/M1.md)) |
-| 2. Picker | ⌥-click elements and reference them as `[1]`, `[2]` | ✅ Built, awaiting your check ([M2 notes](docs/milestones/M2.md)) |
-| 3. Voice | Talk instead of typing, with interruptions | Next |
-| 4. Settings and persistence | Presets, notes, resume across restarts | |
+| 2. Picker | ⌥-click elements and reference them as `[1]`, `[2]` | ✅ Done ([M2 notes](docs/milestones/M2.md)) |
+| 3. Voice | Talk instead of typing, with interruptions | ✅ Built, awaiting your check ([M3 notes](docs/milestones/M3.md)) |
+| 4. Settings and persistence | Presets, notes, resume across restarts | Next |
 
 ## Requirements
 
@@ -66,6 +66,8 @@ If you're working on the extension itself, run `pnpm dev` instead and load `exte
 - Refer to picks in your message as `[1]`, `[2]`, or click a chip in the tray to insert its marker. For example: "make [1] match the spacing on [2]".
 - Picking one item in a repeated list (say one of twelve cards) tells the agent it's one instance of a template, so the edit goes into the shared component rather than one copy.
 - Hovering a chip highlights its pin on the page. Pins stay on their elements through hot reloads and page reloads.
+
+**6. Talk.** Grant the mic once in Sidecall's options (**Grant microphone**), then press the phone button in the side panel. Just talk; you can interrupt the agent, and ⌥-click things while you speak ("make this… match that"). Finished tasks are announced when you pause. If you've hung up, you get a notification, and clicking it starts a call that opens with a summary. Start the daemon with `--preload-voice` to skip the 4 s model load on the first call; the first ever run downloads about 2.6 GB of voice models.
 
 **What else to know**
 
