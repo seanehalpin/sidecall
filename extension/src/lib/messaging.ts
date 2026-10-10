@@ -25,8 +25,14 @@ export const STORAGE_KEYS = {
 
 export const DEFAULT_DAEMON_PORT = 7823;
 
-/** Client message types a page may send; the worker owns hello, pair.request and pong. */
-export type PageDraft = Exclude<ClientDraft, { type: 'hello' | 'pair.request' | 'pong' }>;
+/**
+ * Client message types a page may send. The worker owns hello, pair.request and pong,
+ * and the call lifecycle (call.* and webrtc.*), which pages drive with call commands.
+ */
+export type PageDraft = Exclude<
+  ClientDraft,
+  { type: 'hello' | 'pair.request' | 'pong' | 'call.start' | 'call.end' | 'call.mute' | 'webrtc.offer' | 'webrtc.ice' }
+>;
 
 export type PageCommand =
   | { cmd: 'send'; draft: PageDraft }
@@ -36,6 +42,9 @@ export type PageCommand =
   | { cmd: 'reconnect' }
   | { cmd: 'clearError' }
   | { cmd: 'openOptions' }
+  | { cmd: 'callStart' }
+  | { cmd: 'callEnd' }
+  | { cmd: 'callMute'; muted: boolean }
   | PickCommand;
 
 export type WorkerMessage = { kind: 'state'; state: RailState; daemonPort: number };
@@ -47,15 +56,10 @@ const PAGE_DRAFT_TYPES: ReadonlySet<string> = new Set<PageDraft['type']>([
   'pick.remove',
   'picks.clear',
   'user.text',
-  'call.start',
-  'call.end',
-  'call.mute',
   'task.cancel',
   'task.reorder',
   'approval.respond',
   'settings.update',
-  'webrtc.offer',
-  'webrtc.ice',
 ]);
 
 export function isPageDraft(value: unknown): value is PageDraft {

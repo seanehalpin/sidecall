@@ -3,6 +3,7 @@ import type { PickChip } from '../../src/lib/picker-protocol';
 import {
   applyLocalEvent,
   applyServerMessage,
+  callLabel,
   canSend,
   groupTasks,
   initialRailState,
@@ -282,8 +283,53 @@ describe('transport messages', () => {
     expect(applyServerMessage(s, msg('notify', { title: 't', body: 'b', action: 'open' }))).toBe(s);
   });
 
-  it('call.state is tracked', () => {
-    expect(apply(bound(), msg('call.state', { state: 'listening' })).callState).toBe('listening');
+  it('call.state is tracked during a call', () => {
+    const s = applyLocalEvent(bound(), { kind: 'callStarting' });
+    expect(apply(s, msg('call.state', { state: 'listening' })).callState).toBe('listening');
+  });
+
+  it('call.state without a call of ours stays idle', () => {
+    expect(apply(bound(), msg('call.state', { state: 'listening' })).callState).toBe('idle');
+  });
+});
+
+describe('call lifecycle', () => {
+  it('starting, muting, ending', () => {
+    let s = applyLocalEvent(bound(), { kind: 'callEnded', error: { code: 'x', message: 'old' } });
+    s = applyLocalEvent(s, { kind: 'callStarting' });
+    expect(s).toMatchObject({ inCall: true, callState: 'connecting', muted: false, callError: null });
+    expect(callLabel(s)).toBe('Connecting…');
+    s = apply(s, msg('call.state', { state: 'listening' }), msg('transcript.partial', { text: 'make it' }));
+    expect(callLabel(s)).toBe('Listening');
+    expect(s.partial).toBe('make it');
+    s = applyLocalEvent(s, { kind: 'callMuted', muted: true });
+    expect(s.muted).toBe(true);
+    expect(callLabel(s)).toBe('Muted');
+    expect(callLabel(apply(s, msg('call.state', { state: 'speaking' })))).toBe('Speaking');
+    s = applyLocalEvent(s, { kind: 'callEnded' });
+    expect(s).toMatchObject({ inCall: false, callState: 'idle', muted: false, partial: null, callError: null });
+    expect(callLabel(s)).toBeNull();
+  });
+
+  it('mute is ignored outside a call; ending twice is a no-op', () => {
+    const s = bound();
+    expect(applyLocalEvent(s, { kind: 'callMuted', muted: true })).toBe(s);
+    expect(applyLocalEvent(s, { kind: 'callEnded' })).toBe(s);
+  });
+
+  it('an abnormal end keeps the error until cleared', () => {
+    let s = applyLocalEvent(bound(), { kind: 'callStarting' });
+    s = applyLocalEvent(s, { kind: 'callEnded', error: { code: 'mic_permission', message: 'Grant mic' } });
+    expect(s.callError?.code).toBe('mic_permission');
+    s = applyLocalEvent(s, { kind: 'clearCallError' });
+    expect(s.callError).toBeNull();
+  });
+
+  it('a rebind (origin change) keeps the call', () => {
+    let s = applyLocalEvent(bound(), { kind: 'callStarting' });
+    s = apply(s, msg('call.state', { state: 'listening' }));
+    s = apply(s, msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } } }));
+    expect(s).toMatchObject({ inCall: true, callState: 'listening' });
   });
 });
 

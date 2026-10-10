@@ -79,7 +79,7 @@ describe('extension smoke', () => {
       // A real 2x window (Playwright's deviceScaleFactor doesn't reach
       // captureVisibleTab), so captures exceed the 1568 px cap and get downscaled.
       viewport: null,
-      args: ['--headless=new', '--force-device-scale-factor=2', '--window-size=1280,800', `--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
+      args: ['--headless=new', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--force-device-scale-factor=2', '--window-size=1280,800', `--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
     });
     sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'));
     extId = new URL(sw.url()).host;
@@ -406,6 +406,80 @@ describe('extension smoke', () => {
       await appPage.bringToFront();
       await expect.poll(() => panel.locator('.rail').getAttribute('data-view')).toBe('main');
     });
+  });
+
+  it('runs a voice call: mic grant, offer/answer, state, partial, mute, hang-up', async () => {
+    const offscreens = () =>
+      sw.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT' as never] }).then((c) => c.length));
+    const header = panel.locator('header');
+
+    // 1. Grant from the options page. The fake UI accepts the prompt, and also masks the
+    //    no-grant case (spike 1, case B), so the NotAllowedError path is a manual check.
+    const options = await ctx.newPage();
+    await options.goto(`chrome-extension://${extId}/options.html`);
+    const grant = options.getByRole('button', { name: 'Grant microphone' });
+    await options.locator('[data-mic]:not([data-mic="unknown"])').waitFor();
+    if (await grant.isVisible()) await grant.click();
+    await options.locator('[data-mic="granted"]').waitFor();
+    await options.close();
+    await appPage.bringToFront();
+
+    // 2. Real offer → real answer from a peer connection in the app page.
+    daemon.onOffer = (ws, m) => {
+      void (async () => {
+        const sdp = await appPage.evaluate(async (offer) => {
+          // With a media grant the page gathers real host candidates, not mDNS names.
+          const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const pc = new RTCPeerConnection();
+          for (const t of mic.getTracks()) pc.addTrack(t, mic);
+          (window as unknown as { __pc: RTCPeerConnection }).__pc = pc;
+          await pc.setRemoteDescription({ type: 'offer', sdp: offer });
+          await pc.setLocalDescription(await pc.createAnswer());
+          await new Promise<void>((r) => {
+            if (pc.iceGatheringState === 'complete') return r();
+            pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && r();
+            setTimeout(r, 2000);
+          });
+          return pc.localDescription?.sdp ?? '';
+        }, m.payload.sdp);
+        daemon.send(ws, serverMsg('webrtc.answer', { sdp }));
+        daemon.send(ws, serverMsg('call.state', { state: 'listening' }));
+      })();
+    };
+    await header.getByRole('button', { name: 'Start call' }).click();
+    await daemon.waitFor('call.start');
+    await header.getByText('Connecting…').waitFor();
+    const offer = await daemon.waitFor('webrtc.offer');
+    expect(offer.payload.sdp).toContain('m=audio');
+    expect(offer.payload.sdp).toContain('a=candidate'); // non-trickle: candidates gathered first
+    expect(await offscreens()).toBe(1);
+    await header.locator('[data-call-state="listening"]').getByText('Listening').waitFor();
+    await expect
+      // Signalling is done once the answer is applied. ICE never completes in this headless
+      // environment (even a same-page loopback stays "new"), so "connected" is a manual check.
+      .poll(() => sw.evaluate(() => (globalThis as unknown as { __sidecall: { callLog: { ev: string }[] } }).__sidecall.callLog.some((m) => m.ev === 'answered')), { timeout: 10_000 })
+      .toBe(true);
+    await expect.poll(() => panel.locator('.composer').textContent()).toContain('On a call');
+
+    // 3. Live partial transcript, then thinking.
+    daemon.broadcast(serverMsg('transcript.partial', { text: 'make the button' }));
+    await panel.locator('.partial').getByText('make the button').waitFor();
+    daemon.broadcast(serverMsg('call.state', { state: 'thinking' }));
+    await header.getByText('Thinking').waitFor();
+    daemon.broadcast(serverMsg('call.state', { state: 'listening' }));
+
+    // 4. Mute.
+    await header.getByRole('button', { name: 'Mute' }).click();
+    expect((await daemon.waitFor('call.mute')).payload.muted).toBe(true);
+    await header.getByText('Muted').waitFor();
+
+    // 5. Hang up: call.end, offscreen document closed, back to idle.
+    await header.getByRole('button', { name: 'End call' }).click();
+    await daemon.waitFor('call.end');
+    await expect.poll(offscreens).toBe(0);
+    await header.getByRole('button', { name: 'Start call' }).waitFor();
+    await expect.poll(() => panel.locator('.partial').count()).toBe(0);
+    await appPage.evaluate(() => (window as unknown as { __pc: RTCPeerConnection }).__pc.close());
   });
 
   it('rebinds on the same socket when the active tab origin changes', async () => {

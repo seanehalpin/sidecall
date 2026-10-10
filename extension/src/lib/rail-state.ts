@@ -59,7 +59,14 @@ export interface RailState {
   /** Latest task.event text per task id. */
   lastTaskEvent: Record<string, string>;
   settings: Settings | null;
+  /** What the daemon says the voice pipeline is doing (call.state); 'connecting' locally while starting. */
   callState: CallState;
+  /** A call is up or starting (the worker owns the lifecycle; survives tab and origin changes). */
+  inCall: boolean;
+  /** The mic track is disabled. */
+  muted: boolean;
+  /** Why the last call ended abnormally; shown until dismissed or a new call starts. */
+  callError: RailError | null;
   clockOffset: number | null;
   /** Live picks (this and earlier turns until consumed by a task or cleared), by id. */
   picks: PickChip[];
@@ -87,6 +94,9 @@ export function initialRailState(): RailState {
     lastTaskEvent: {},
     settings: null,
     callState: 'idle',
+    inCall: false,
+    muted: false,
+    callError: null,
     clockOffset: null,
     picks: [],
     pickHistory: {},
@@ -102,6 +112,10 @@ export type LocalEvent =
   | { kind: 'origin'; origin: string | null }
   | { kind: 'error'; error: RailError }
   | { kind: 'clearError' }
+  | { kind: 'callStarting' }
+  | { kind: 'callEnded'; error?: RailError }
+  | { kind: 'callMuted'; muted: boolean }
+  | { kind: 'clearCallError' }
   | { kind: 'pickAdd'; chip: PickChip; origin: string | null }
   | { kind: 'pickPatch'; id: number; patch: Partial<Pick<PickChip, 'status' | 'stale'>> }
   | { kind: 'picksRemove'; ids: number[] }
@@ -198,9 +212,11 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
       return { ...state, lastError: { code, message } };
     }
     case 'call.state':
+      // Without a call of ours, only idle is meaningful (the worker tears down on idle).
+      if (!state.inCall) return state.callState === 'idle' ? state : { ...state, callState: 'idle' };
       return { ...state, callState: msg.payload.state };
     case 'transcript.partial':
-      return { ...state, partial: msg.payload.text };
+      return { ...state, partial: msg.payload.text || null };
     case 'transcript.final': {
       const p = msg.payload;
       const item: TranscriptItem = {
@@ -340,6 +356,15 @@ export function applyLocalEvent(state: RailState, ev: LocalEvent): RailState {
       return { ...state, lastError: ev.error };
     case 'clearError':
       return state.lastError ? { ...state, lastError: null } : state;
+    case 'callStarting':
+      return { ...state, inCall: true, callState: 'connecting', muted: false, callError: null, partial: null };
+    case 'callEnded':
+      if (!state.inCall && !ev.error) return state;
+      return { ...state, inCall: false, callState: 'idle', muted: false, partial: null, callError: ev.error ?? null };
+    case 'callMuted':
+      return state.inCall && state.muted !== ev.muted ? { ...state, muted: ev.muted } : state;
+    case 'clearCallError':
+      return state.callError ? { ...state, callError: null } : state;
     case 'pickAdd': {
       const picks = [...state.picks.filter((p) => p.id !== ev.chip.id), ev.chip].sort((a, b) => a.id - b.id);
       const pickHistory = { ...state.pickHistory, [ev.chip.id]: { label: chipTitle(ev.chip), tooltip: ev.chip.tooltip } };
@@ -387,6 +412,22 @@ export function railView(state: RailState): RailView {
   if (state.repoUnknown) return 'repo_unknown';
   if (state.repo) return 'main';
   return 'binding';
+}
+
+/** Header call indicator text, or null when there's nothing to show. */
+export function callLabel(state: Pick<RailState, 'inCall' | 'callState' | 'muted'>): string | null {
+  if (!state.inCall) return null;
+  switch (state.callState) {
+    case 'idle':
+    case 'connecting':
+      return 'Connecting…';
+    case 'listening':
+      return state.muted ? 'Muted' : 'Listening';
+    case 'thinking':
+      return 'Thinking';
+    case 'speaking':
+      return 'Speaking';
+  }
 }
 
 /** The composer and task actions only work when connected and bound to a repo. */

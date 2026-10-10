@@ -99,6 +99,9 @@ describe('page messaging helpers', () => {
     expect(isPageDraft({ type: 'pong', payload: { seq: 1 } })).toBe(false);
     expect(isPageDraft({ type: 'user.text' })).toBe(false);
     expect(isPageDraft(null)).toBe(false);
+    // The worker owns the call lifecycle; pages use call commands instead.
+    expect(isPageDraft({ type: 'call.start', payload: {} })).toBe(false);
+    expect(isPageDraft({ type: 'webrtc.offer', payload: { sdp: 'v=0' } })).toBe(false);
   });
 
   it('parses ports', () => {

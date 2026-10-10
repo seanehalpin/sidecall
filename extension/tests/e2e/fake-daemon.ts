@@ -46,6 +46,8 @@ export class FakeDaemon {
   token = 'tok-test';
   state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } };
   onUserText: ((ws: WebSocket, m: ClientOf<'user.text'>) => void) | null = null;
+  /** Answer a webrtc.offer (the test produces a real SDP answer); unset → no answer. */
+  onOffer: ((ws: WebSocket, m: ClientOf<'webrtc.offer'>) => void) | null = null;
   private waiters: Waiter[] = [];
   private constructor(
     private readonly http: Server,
@@ -182,6 +184,15 @@ export class FakeDaemon {
           return;
         case 'user.text':
           this.onUserText?.(ws, msg);
+          return;
+        case 'call.start':
+          this.send(ws, serverMsg('call.state', { state: 'connecting' }));
+          return;
+        case 'call.end':
+          this.send(ws, serverMsg('call.state', { state: 'idle' }));
+          return;
+        case 'webrtc.offer':
+          this.onOffer?.(ws, msg);
           return;
         case 'approval.respond':
           this.broadcast(serverMsg('approval.resolved', { id: msg.payload.id, allow: msg.payload.allow }));

@@ -5,8 +5,9 @@
   let {
     disabled,
     showPickHint = false,
+    inCall = false,
     onsend,
-  }: { disabled: boolean; showPickHint?: boolean; onsend: (text: string) => void } = $props();
+  }: { disabled: boolean; showPickHint?: boolean; inCall?: boolean; onsend: (text: string) => void } = $props();
 
   let text = $state('');
   let field: HTMLTextAreaElement | undefined = $state();
@@ -58,10 +59,12 @@
   ></textarea>
   <div class="row">
     <span class="hint muted">
-      {#if showPickHint}
+      {#if inCall}
+        <span class="call-hint">On a call: just talk, or type here</span>
+      {:else if showPickHint}
         <span class="pick-hint">⌥-click elements on the page, then refer to them as [1], [2]</span>
       {:else}
-        Type your request · voice is coming in a later update
+        Type your request, or start a voice call from the phone button
       {/if}
     </span>
     <button class="primary" type="submit" disabled={disabled || text.trim() === ''}>Send</button>

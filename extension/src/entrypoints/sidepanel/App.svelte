@@ -29,7 +29,14 @@
 </script>
 
 <div class="rail" data-view={view}>
-  <Header {rail} onsettings={openSettings} />
+  <Header
+    {rail}
+    canCall={sendable}
+    onsettings={openSettings}
+    oncall={() => client.command({ cmd: 'callStart' })}
+    onhangup={() => client.command({ cmd: 'callEnd' })}
+    onmute={(muted) => client.command({ cmd: 'callMute', muted })}
+  />
 
   {#if view === 'main'}
     <Approvals
@@ -37,6 +44,17 @@
       disabled={!sendable}
       onrespond={(id, allow) => client.send({ type: 'approval.respond', payload: { id, allow } })}
     />
+    {#if rail.callError}
+      <div class="banner" role="alert" data-call-error={rail.callError.code}>
+        <span>{rail.callError.message}</span>
+        <span class="actions">
+          {#if rail.callError.code === 'mic_permission'}
+            <button class="link" onclick={openSettings}>Open settings</button>
+          {/if}
+          <button onclick={() => client.command({ cmd: 'clearError' })} aria-label="Dismiss">×</button>
+        </span>
+      </div>
+    {/if}
     {#if banner}
       <div class="banner" role="alert">
         <span>{banner.message}</span>
@@ -96,6 +114,7 @@
     bind:this={composer}
     disabled={!sendable}
     showPickHint={view === 'main' && rail.picks.length === 0}
+    inCall={rail.inCall}
     onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
   />
 </div>
@@ -150,5 +169,13 @@
     border: none;
     background: transparent;
     padding: 0 4px;
+  }
+  .banner .actions {
+    display: inline-flex;
+    gap: 4px;
+    flex: none;
+  }
+  .banner .link {
+    text-decoration: underline;
   }
 </style>

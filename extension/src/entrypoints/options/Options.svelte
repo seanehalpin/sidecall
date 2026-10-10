@@ -23,6 +23,52 @@
         : 'Daemon offline',
   );
 
+  // Microphone: only an extension page shown in a tab can prompt for it; the grant
+  // then covers the offscreen call document too (SPEC §5.5).
+  let mic = $state<PermissionState | 'unknown'>('unknown');
+  let micError: string | null = $state(null);
+  let micBusy = $state(false);
+
+  $effect(() => {
+    let status: PermissionStatus | null = null;
+    const update = () => {
+      if (status) mic = status.state;
+    };
+    navigator.permissions
+      .query({ name: 'microphone' as PermissionName })
+      .then((s) => {
+        status = s;
+        update();
+        s.addEventListener('change', update);
+      })
+      .catch(() => (mic = 'unknown'));
+    return () => status?.removeEventListener('change', update);
+  });
+
+  const micText = $derived(
+    mic === 'granted'
+      ? 'Microphone granted'
+      : mic === 'denied'
+        ? 'Microphone blocked. Allow it in Chrome’s site settings for this extension, then reload this page.'
+        : 'Microphone not granted yet',
+  );
+
+  async function grantMic() {
+    micBusy = true;
+    micError = null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      mic = 'granted';
+    } catch (err) {
+      micError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      const status = await navigator.permissions.query({ name: 'microphone' as PermissionName }).catch(() => null);
+      if (status) mic = status.state;
+    } finally {
+      micBusy = false;
+    }
+  }
+
   function savePort(e: SubmitEvent) {
     e.preventDefault();
     if (parsedPort === null) return;
@@ -55,6 +101,16 @@
       <button type="submit" disabled={parsedPort === null || parsedPort === client.daemonPort}>Save</button>
       {#if saved}<span class="muted">Saved</span>{/if}
     </form>
+  </section>
+
+  <section>
+    <h2>Microphone</h2>
+    <p class="status" data-mic={mic}>{micText}</p>
+    <p class="muted">Voice calls need the microphone. Chrome can only ask for it here, so grant it once.</p>
+    {#if mic !== 'granted'}
+      <button class="primary" onclick={grantMic} disabled={micBusy}>Grant microphone</button>
+    {/if}
+    {#if micError}<p class="error-text" role="alert">{micError}</p>{/if}
   </section>
 
   <section>

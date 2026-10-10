@@ -11,6 +11,9 @@
 //   to POST /api/upload) to every user.text turn.
 // - Runs the pick lifecycle (SPEC §5.2, §5.3, §6.9): ids, clock, screenshots,
 //   pick.add / pick.remove / picks.clear, pins on the page, dim and consume.
+// - Owns the voice call (SPEC §5.5): creates the offscreen document on call start,
+//   relays webrtc.offer / webrtc.answer between it and the daemon, closes it on
+//   hang-up, socket loss, a daemon idle or an offscreen error.
 import { browser, type Browser } from 'wxt/browser';
 import { backoffDelay } from '@/lib/backoff';
 import {
@@ -34,6 +37,14 @@ import {
   type PickerRuntimeDown,
   type PickerRuntimeUp,
 } from '@/lib/picker-protocol';
+import {
+  CALL_RUNTIME_KIND,
+  OFFSCREEN_PATH,
+  isCallUp,
+  type CallDown,
+  type CallRuntimeDown,
+  type CallUp,
+} from '@/lib/call-protocol';
 import { AckWaiter } from '@/lib/picks/ack';
 import { buildChip, buildPin } from '@/lib/picks/chip';
 import { createCaptureGate } from '@/lib/picks/gate';
@@ -113,7 +124,9 @@ export default defineBackground(() => {
    * worker's DevTools / Playwright as `globalThis.__sidecall.pageLog`.
    */
   const pageLog: { tabId: number; msg: ExtToPage }[] = [];
-  (globalThis as { __sidecall?: unknown }).__sidecall = { pageLog };
+  /** Test seam: every message from the offscreen call document, newest last. */
+  const callLog: CallUp[] = [];
+  (globalThis as { __sidecall?: unknown }).__sidecall = { pageLog, callLog };
 
   // --- State -----------------------------------------------------------------
 
@@ -204,6 +217,8 @@ export default defineBackground(() => {
       if (ws !== sock) return;
       ws = null;
       if (ev.code === 4401) void forgetToken();
+      // The daemon drops its half of the call with the socket.
+      if (state.inCall) void endCall({ notifyDaemon: false, error: { code: 'call_lost', message: 'The call ended: lost the connection to the daemon.' } });
       local({ kind: 'connection', status: 'offline' });
       scheduleReconnect();
     };
@@ -236,6 +251,10 @@ export default defineBackground(() => {
         sendHello();
         return;
       case 'error':
+        if (state.inCall && isCallError(msg.payload.code)) {
+          void endCall({ notifyDaemon: false, error: { code: msg.payload.code, message: msg.payload.message } });
+          return;
+        }
         if (msg.payload.code === 'unauthorized') {
           token = null;
           void browser.storage.local.remove(STORAGE_KEYS.token);
@@ -246,6 +265,16 @@ export default defineBackground(() => {
         break;
       case 'task.created':
         consumePicks(msg.payload.pickIds);
+        break;
+      case 'webrtc.answer':
+        if (state.inCall) toOffscreen({ op: 'answer', sdp: msg.payload.sdp });
+        return;
+      case 'call.state':
+        // The daemon ended the call (or never had one): tear ours down.
+        if (msg.payload.state === 'idle' && state.inCall) {
+          void endCall({ notifyDaemon: false });
+          return;
+        }
         break;
     }
     setState(applyServerMessage(state, msg));
@@ -583,6 +612,117 @@ export default defineBackground(() => {
     void ready.then(() => handlePageMessage(raw.msg, sender));
   });
 
+  // --- Voice call (SPEC §5.5) --------------------------------------------------
+
+  let creatingOffscreen: Promise<void> | null = null;
+  const offscreenUrl = browser.runtime.getURL(OFFSCREEN_PATH);
+
+  /** Daemon error codes that mean the call can't go on. */
+  const isCallError = (code: string) => code === 'not_implemented' || code.startsWith('call') || code.startsWith('webrtc') || code === 'no_repo';
+
+  async function hasOffscreen(): Promise<boolean> {
+    const api = browser.offscreen as typeof browser.offscreen & { hasDocument?: () => Promise<boolean> };
+    if (typeof api.hasDocument === 'function') return api.hasDocument();
+    const contexts = await browser.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT' as Browser.runtime.ContextType],
+      documentUrls: [offscreenUrl],
+    });
+    return contexts.length > 0;
+  }
+
+  /** Only one offscreen document may exist per extension: guard with hasDocument plus an in-flight promise. */
+  async function ensureOffscreen(): Promise<void> {
+    if (creatingOffscreen) return creatingOffscreen;
+    creatingOffscreen = (async () => {
+      if (await hasOffscreen()) return;
+      await browser.offscreen.createDocument({
+        url: OFFSCREEN_PATH,
+        // Never AUDIO_PLAYBACK: it closes the document after 30 s of silence.
+        reasons: ['USER_MEDIA' as Browser.offscreen.Reason, 'WEB_RTC' as Browser.offscreen.Reason],
+        justification: 'Holds the microphone and the WebRTC audio connection for a Sidecall voice call.',
+      });
+    })();
+    try {
+      await creatingOffscreen;
+    } finally {
+      creatingOffscreen = null;
+    }
+  }
+
+  async function closeOffscreen(): Promise<void> {
+    try {
+      if (creatingOffscreen) await creatingOffscreen.catch(() => {});
+      if (await hasOffscreen()) await browser.offscreen.closeDocument();
+    } catch (err) {
+      console.warn('[sidecall] closing the offscreen document failed', err);
+    }
+  }
+
+  function toOffscreen(msg: CallDown): void {
+    const wrapped: CallRuntimeDown = { kind: CALL_RUNTIME_KIND, to: 'offscreen', msg };
+    void browser.runtime.sendMessage(wrapped).catch(() => {});
+  }
+
+  async function startCall(): Promise<void> {
+    if (state.inCall) return;
+    if (!token || !isOpen() || !state.repo) {
+      local({ kind: 'error', error: { code: 'not_connected', message: 'Connect to a repo to start a call.' } });
+      return;
+    }
+    local({ kind: 'callStarting' });
+    send(envelope('call.start', {}));
+    try {
+      // The document starts the mic and sends its offer as soon as it loads.
+      await ensureOffscreen();
+    } catch (err) {
+      await endCall({ error: { code: 'offscreen_failed', message: `Could not start the call: ${err instanceof Error ? err.message : String(err)}` } });
+    }
+  }
+
+  async function endCall(opts: { notifyDaemon?: boolean; error?: { code: string; message: string } } = {}): Promise<void> {
+    const wasInCall = state.inCall;
+    local({ kind: 'callEnded', ...(opts.error ? { error: opts.error } : {}) });
+    if (wasInCall && opts.notifyDaemon !== false && token) send(envelope('call.end', {}));
+    await closeOffscreen();
+  }
+
+  function setMuted(muted: boolean): void {
+    if (!state.inCall) return;
+    local({ kind: 'callMuted', muted });
+    toOffscreen({ op: 'mute', muted });
+    if (token) send(envelope('call.mute', { muted }));
+  }
+
+  function handleCallUp(msg: CallUp): void {
+    callLog.push(msg);
+    if (callLog.length > PAGE_LOG_LIMIT) callLog.splice(0, callLog.length - PAGE_LOG_LIMIT);
+    if (!state.inCall) {
+      // A document left over from an earlier call (e.g. after a worker restart).
+      void closeOffscreen();
+      return;
+    }
+    switch (msg.ev) {
+      case 'offer':
+        if (!send(envelope('webrtc.offer', { sdp: msg.sdp }))) {
+          void endCall({ notifyDaemon: false, error: { code: 'call_lost', message: 'The call ended: lost the connection to the daemon.' } });
+        }
+        return;
+      case 'answered':
+      case 'connection':
+        return;
+      case 'error':
+        void endCall({ error: { code: msg.code, message: msg.message } });
+        // Only the options page can grant the mic (SPEC §5.5).
+        if (msg.code === 'mic_permission') void browser.runtime.openOptionsPage().catch(() => {});
+        return;
+    }
+  }
+
+  browser.runtime.onMessage.addListener((raw: unknown) => {
+    if (!isCallUp(raw)) return;
+    void ready.then(() => handleCallUp(raw.msg));
+  });
+
   // --- Notifications ---------------------------------------------------------
 
   function showNotification(p: NotifyPayload): void {
@@ -673,9 +813,19 @@ export default defineBackground(() => {
         return;
       case 'clearError':
         local({ kind: 'clearError' });
+        local({ kind: 'clearCallError' });
         return;
       case 'openOptions':
         await browser.runtime.openOptionsPage();
+        return;
+      case 'callStart':
+        await startCall();
+        return;
+      case 'callEnd':
+        await endCall();
+        return;
+      case 'callMute':
+        setMuted(cmd.muted === true);
         return;
       case 'pickRemove':
         if (typeof cmd.id === 'number') removePicks([cmd.id]);
@@ -793,6 +943,12 @@ export default defineBackground(() => {
     pickCounter = Math.max(typeof counter === 'number' ? counter : 0, ...state.picks.map((p) => p.id));
     const win = session[STORAGE_KEYS.lastWindowId];
     if (typeof win === 'number') lastWindowId = win;
+    // A restarted worker has lost its socket, and the daemon ended the call with it.
+    if (state.inCall) {
+      state = applyLocalEvent(state, { kind: 'callEnded', error: { code: 'call_lost', message: 'The call ended when Sidecall restarted.' } });
+    }
+    state = { ...state, callState: 'idle' };
+    void closeOffscreen();
   })();
 
   void ready.then(async () => {
