@@ -44,8 +44,11 @@ export function planCrop(
   margin: number = CROP_MARGIN,
   maxEdge: number = SCREENSHOT_MAX_EDGE,
 ): CropPlan {
+  // One scale for both axes: pixels are square, and the bitmap can be shorter than the
+  // reported viewport (headless windows with an emulated viewport), which would
+  // otherwise squash the vertical coordinates.
   const kx = bitmap.w / viewport.w;
-  const ky = bitmap.h / viewport.h;
+  const ky = kx;
   const css = clipRect(rect, viewport, margin) ?? { x: 0, y: 0, w: viewport.w, h: viewport.h };
   const sx = Math.min(bitmap.w - 1, Math.max(0, Math.floor(css.x * kx)));
   const sy = Math.min(bitmap.h - 1, Math.max(0, Math.floor(css.y * ky)));
@@ -72,8 +75,8 @@ export function planViewport(
 ): ViewportPlan {
   const out = downscaleSize(bitmap.w, bitmap.h, maxEdge);
   const visible = clipRect(rect, viewport, 0);
-  const kx = out.width / viewport.w;
-  const ky = out.height / viewport.h;
+  const kx = out.width / viewport.w; // uniform scale, as in planCrop
+  const ky = kx;
   const outline = visible
     ? { x: visible.x * kx, y: visible.y * ky, w: visible.w * kx, h: visible.h * ky }
     : null;

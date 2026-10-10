@@ -14,7 +14,8 @@ import { chromium } from 'playwright';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 const EXT_DIR = join(ROOT, 'extension/.output/chrome-mv3');
-const DAEMON_PORT = 7823; // the extension's default
+// A port of our own, so a daemon you already have running on 7823 isn't disturbed.
+const DAEMON_PORT = 7893;
 const APP_PORT = 5373;
 const results = [];
 
@@ -24,7 +25,7 @@ function check(name, ok, detail = '') {
 }
 
 function startDaemon(home) {
-  const proc = spawn('uv', ['run', '--project', join(ROOT, 'daemon'), 'sidecall', 'start'], {
+  const proc = spawn('uv', ['run', '--project', join(ROOT, 'daemon'), 'sidecall', 'start', '--port', String(DAEMON_PORT)], {
     env: { ...process.env, SIDECALL_HOME: home },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -122,6 +123,7 @@ try {
   });
   const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'));
   const extId = new URL(sw.url()).host;
+  await sw.evaluate((port) => chrome.storage.local.set({ daemonPort: port }), DAEMON_PORT);
   check('extension id is pinned', extId === 'kcjkimilmanlonlplfancfpoekkphjhb', extId);
 
   // Playwright opens every tab as about:blank first, which counts as "no local app"

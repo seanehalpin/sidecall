@@ -67,6 +67,24 @@ describe('ids and clock', () => {
   });
 });
 
+describe('geometry with a bitmap shorter than the viewport', () => {
+  // A headless window can report a 1280x720 viewport but capture only 1280x633.
+  const viewport = { w: 1280, h: 720 };
+  const bitmap = { w: 1280, h: 633 };
+  const rect = { x: 24, y: 70, w: 200, h: 45 };
+
+  it('does not squash the outline vertically', () => {
+    const plan = planViewport(rect, viewport, bitmap);
+    expect(plan.outline).toEqual(rect);
+  });
+
+  it('crops at the true pixel position', () => {
+    const plan = planCrop(rect, viewport, bitmap, 0);
+    expect(plan.sy).toBe(70);
+    expect(plan.sh).toBe(45);
+  });
+});
+
 describe('geometry', () => {
   const vp = { w: 1280, h: 800 };
   it('clips with margin', () => {
