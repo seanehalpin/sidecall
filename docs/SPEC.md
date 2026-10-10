@@ -76,7 +76,6 @@ Top to bottom:
 6. **Composer:** a plain textarea. Enter sends. A picks hint shows under it while picks exist.
    - New picks go to the tray rather than into the composer: clicking on the page blurs the side panel, so the composer is never focused when a pick lands.
    - Inline chips inside the text were dropped because a textarea can't hold them.
-   - Voice (mic state) arrives in Milestone 3.
 
 ### 5.2 Picker
 
@@ -191,7 +190,7 @@ type ElementInfo = {
   - Only one offscreen document may exist per extension, so guard creation with `chrome.offscreen.hasDocument()` / `runtime.getContexts` plus an in-flight promise.
   - It survives the panel closing and tab switches (spike 1).
 - Mic constraints: `{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }`.
-- **Mic permission** is granted once from the extension options page, which opens in a tab (`open_in_tab: true`). The offscreen document can't show a permission prompt: without the grant, `getUserMedia` rejects immediately with `NotAllowedError` ("Permission dismissed"). Before starting a call, the rail checks `navigator.permissions.query({name:'microphone'})` and sends the user to the options page if the mic isn't granted.
+- **Mic permission** is granted once from the extension options page, which opens in a tab (`open_in_tab: true`). The offscreen document can't show a permission prompt: without the grant, `getUserMedia` rejects immediately with `NotAllowedError` ("Permission dismissed"). Before opening the mic, the offscreen document checks `navigator.permissions.query({name:'microphone'})`. If the mic isn't granted (or getUserMedia rejects with NotAllowedError), the worker ends the call, shows an error with a link to settings, and opens the options page.
 - **Echo cancellation:** agent audio is played only from the WebRTC remote track, via an `<audio>` element in the offscreen document. That is the path Chrome's AEC has always used as its far-end reference. Chrome 15x also offers `echoCancellation: "remote-only" | "all"`. A test tool exists (spike 2), but the result needs a manual run on real speakers. Fallback: require headphones.
 
 ### 5.6 Service worker
@@ -474,7 +473,13 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
 - `task.event.kind` is `status` (for example "Started"), `edit` (Edit, Write, MultiEdit, NotebookEdit), `tool` (other tool calls, for example "Reading src/x.svelte") or `text` (short snippets of the worker's own text).
 
 **Error codes**
-- Beyond the codes above: `bad_message`, `no_repo` (a turn or task message on a connection with no repo bound), `bad_origin`, `unknown_task`, `unknown_approval`, and `not_implemented` (for `pick.*`, `call.*` and `webrtc.*` until their milestones).
+- Beyond the codes above: `call_active`, `no_call`, `call_failed`, `bad_message`, `no_repo` (a turn or task message on a connection with no repo bound), `bad_origin`, `unknown_task`, `unknown_approval`, and `not_implemented` (now unused).
+
+**Calls**
+- Signalling is non-trickle: the offer is sent after ICE gathering completes, and the daemon ignores `webrtc.ice`.
+- `call.state`, `transcript.partial` and `webrtc.answer` go only to the connection that owns the call; `transcript.final` and `agent.text.*` go to everyone bound to the repo.
+- `transcript.partial` is "…" while VAD hears speech, then the segment text so far.
+- Measured through the real extension (headless, recorded voice as the mic): 877 ms from end of speech to first audio on the first turn.
 
 **Cancel and reorder**
 - `task.cancel` on a queued task marks it cancelled. On the running task, it interrupts the worker.
