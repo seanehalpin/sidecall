@@ -36,6 +36,13 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# The spoken/pick formats (SPEC §6.9) use the multiplication sign on purpose.
+"src/sidecall/prompts.py" = ["RUF001"]
+"tests/test_picks.py" = ["RUF001"]
+"tests/test_prompts.py" = ["RUF001"]
+"tests/test_server.py" = ["RUF001"]
+
 [tool.pyright]
 include = ["src", "tests"]
 pythonVersion = "3.12"

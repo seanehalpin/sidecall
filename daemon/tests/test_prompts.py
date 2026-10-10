@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
-from helpers import make_task
+from helpers import make_pick, make_task
 
 from sidecall.paths import normalise_brief, rel_path
 from sidecall.prompts import (
+    TALKER_SYSTEM_PROMPT,
     brief_tool_schema,
+    pick_payload_json,
+    render_pick_summary,
     render_talker_turn,
     render_target,
     render_worker_prompt,
@@ -266,3 +270,117 @@ def test_render_worker_prompt_page_section() -> None:
     assert "screenshot" not in render_worker_prompt(task, screenshot_attached=False)
     task.page = _page(None)
     assert "screenshot" not in render_worker_prompt(task)
+
+
+# --- picks ---------------------------------------------------------------------------
+
+
+def test_pick_summary_element_with_repeat_and_styles() -> None:
+    pick = make_pick(
+        1,
+        repeat=(12, 2),
+        styles={
+            "display": "flex",
+            "color": "rgb(0, 0, 0)",
+            "padding": "12px 16px",
+            "box-shadow": "0 1px 2px rgba(0,0,0,.2)",
+            "width": "300px",
+            "margin": "0px",
+            "gap": "4px",
+            "font-size": "16px",
+            "font-weight": "700",
+        },
+    )
+    line = render_pick_summary(pick)
+    assert line == (
+        "[1] div.card-header — CardHeader — src/lib/Card.svelte:14:3 (element) — "
+        "repeated 12×, instance 3 — padding 12px 16px; margin 0px; gap 4px; font-size 16px; "
+        "font-weight 700; color rgb(0, 0, 0)"
+    )
+    assert "width" not in line  # only the curated keys
+
+
+def test_pick_summary_no_repeat_for_count_one_and_id_class_label() -> None:
+    pick = make_pick(4, repeat=(1, 0), tag="h3", classes="sidebar-title big extra")
+    assert pick.element is not None
+    pick.element.attributes["id"] = "t"
+    line = render_pick_summary(pick)
+    assert line.startswith("[4] h3#t.sidebar-title.big — ")
+    assert "repeated" not in line
+
+
+def test_pick_summary_no_source_and_no_chain() -> None:
+    pick = make_pick(3, file=None, chain=[], framework="unknown", styles={})
+    assert render_pick_summary(pick) == "[3] div.card-header — source unknown"
+
+
+def test_pick_summary_region() -> None:
+    line = render_pick_summary(
+        make_pick(2, kind="region", file=None, framework="unknown", chain=[])
+    )
+    assert line.startswith("[2] region 320×180 at (40,120) — contains: button.btn-0 ")
+    assert line.count("button.btn-") == 5
+    assert '"Button number 0 with a rather…"' in line
+    assert line.endswith("(top 5)")
+
+
+def test_talker_turn_picks_section_and_unknown_ids() -> None:
+    known = make_pick(1)
+    prompt = render_talker_turn("make [1] like [7]", picks=[known, 7])
+    lines = prompt.splitlines()
+    assert lines[0] == "User: make [1] like [7]"
+    assert lines[1] == "Picks:"
+    assert lines[2] == render_pick_summary(known)
+    assert lines[3] == "[7] (no longer available)"
+    assert "Picks:" not in render_talker_turn("hi")
+
+
+def test_talker_system_prompt_mentions_pick_rules() -> None:
+    for expected in ["get_pick", "repeated N×", "just this one", "pick_id"]:
+        assert expected in TALKER_SYSTEM_PROMPT
+
+
+def test_worker_prompt_renders_picks_fully() -> None:
+    pick = make_pick(1, repeat=(12, 2))
+    assert pick.element is not None
+    pick.element.outer_html = "<div>" + "x" * 3000 + "</div>"
+    prompt = render_worker_prompt(make_task(), [pick], pick_images=True)
+    for expected in [
+        "Picked elements",
+        "[1] element",
+        "selector: article > div.card-header",
+        "alt selectors: [data-testid=x]",
+        'attributes: class="card-header" data-testid="x"',
+        "text: Hello",
+        "computed styles: padding: 12px 16px; display: block; box-shadow: 0 1px 2px #000",
+        "framework: svelte 5",
+        "source: src/lib/Card.svelte:14:3 (element)",
+        "CardHeader (src/lib/Card.svelte:8:2)",
+        'props: {"title": "Hello"}',
+        "repeated 12×, instance 3",
+        "page: http://localhost:5173/cards (route /cards",
+        '"[n] crop"',
+        "Edit the template/component that renders them all",
+        "Don't change unrelated instances",
+    ]:
+        assert expected in prompt, expected
+    assert "x" * 2000 not in prompt  # outerHTML is trimmed
+    assert "Picked elements" not in render_worker_prompt(make_task())
+    assert "Start from the picked" not in render_worker_prompt(make_task())
+
+
+def test_worker_prompt_unknown_source_hint() -> None:
+    pick = make_pick(5, file=None, chain=[], framework="unknown")
+    assert "source: unknown (search the repo" in render_worker_prompt(make_task(), [pick])
+
+
+def test_pick_payload_json_is_the_full_wire_payload() -> None:
+    data = json.loads(
+        pick_payload_json(make_pick(1, repeat=(3, 1), screenshots=("a" * 32, "b" * 32)))
+    )
+    assert data["element"]["outerHTML"].startswith("<div")
+    assert data["element"]["computedStyles"]["padding"] == "12px 16px"
+    assert data["repeat"] == {"count": 3, "index": 1}
+    assert data["screenshots"] == {"crop": "a" * 32, "viewport": "b" * 32}
+    assert data["framework"]["props"] == {"title": "Hello"}
+    assert data["page"]["route"] == "/cards"

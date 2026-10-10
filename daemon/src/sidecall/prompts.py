@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from typing import Any
 
 from .protocol.models import Brief, PageContext, Pick, Target, Task
+
+PickRef = Pick | int
+"""A pick, or the bare id of one that is no longer available."""
 
 TALKER_SYSTEM_PROMPT = """\
 You are Sidecall's talker: the conversational half of a tool for prototyping by talking. \
@@ -21,7 +25,15 @@ You hand it work by calling dispatch_task with a clear brief.
 - Keep replies short and conversational, like speech: one to three short sentences, \
 natural contractions, no markdown, no lists, no code blocks. Your replies may be read aloud.
 - Markers like [1] or [2] refer to elements the user picked; they are listed after the \
-user's text when present. Resolve them against that list.
+user's text under "Picks:", with their source file and line, component, repeat info and key \
+styles, and a cropped screenshot of each. Resolve every marker against that list. If the \
+summary isn't enough, call get_pick(id) for the full payload (HTML, all styles, props).
+- Put the picks into the brief's targets with pick_id, file, line and component.
+- A pick with "repeated N×" (N > 1) is one instance of a repeated template. Change the shared \
+template or component the instances come from, not one copy, unless the user says "just this one".
+- If a pick has no source, say in the brief what the worker should search for (the \
+component, class names or text). A pick marked "(no longer available)" was cleared; ask the \
+user to pick it again if you need it.
 - If a request is ambiguous, ask exactly one short clarifying question.
 - When the request is clear, confirm the brief in one sentence and call dispatch_task \
 in the same turn. Don't wait for a second confirmation. Put the files (repo-relative \
@@ -57,7 +69,9 @@ Rules:
 - If a step is denied, continue without it if you can, and mention it in your summary.
 - Finish with a one to three sentence plain-text summary of what you changed.
 - Briefs say which page the user was looking at. Scope the change to that page unless \
-the brief says otherwise; don't change shared components used elsewhere without being asked.
+the brief says otherwise; don't change shared components, layouts or global styles used \
+elsewhere without being asked. The exception is the component or template that renders a \
+picked element: when a pick is one of several repeated instances, edit that shared template.
 """
 
 UNDO_BRIEF = Brief(
@@ -86,25 +100,168 @@ def render_target(target: Target) -> str:
     return f"{location} — {target.description}" if location else target.description
 
 
+STYLE_KEYS = (
+    "padding",
+    "margin",
+    "gap",
+    "font-size",
+    "font-weight",
+    "color",
+    "background-color",
+    "border-radius",
+    "box-shadow",
+    "display",
+)
+MAX_SUMMARY_STYLES = 6
+_VALUE_LIMIT = 60
+_HTML_LIMIT = 1500
+_PROPS_LIMIT = 1000
+
+
+def _clip(text: str, limit: int) -> str:
+    one_line = " ".join(text.split())
+    return one_line if len(one_line) <= limit else one_line[: limit - 1].rstrip() + "…"
+
+
+def _num(value: float) -> str:
+    return f"{round(value):d}"
+
+
+def pick_label(pick: Pick) -> str:
+    """tag#id.class1.class2 for an element pick (falls back to the CSS selector)."""
+    el = pick.element
+    if el is None:
+        return "region"
+    tag = el.tag.lower() or el.selector
+    label = tag
+    ident = el.attributes.get("id", "").strip()
+    if ident:
+        label += f"#{ident}"
+    classes = el.attributes.get("class", "").split()
+    label += "".join(f".{c}" for c in classes[:2])
+    return label
+
+
+def _summary_styles(styles: dict[str, str]) -> str:
+    picked = [(k, styles[k]) for k in STYLE_KEYS if styles.get(k)]
+    return "; ".join(f"{k} {_clip(v, _VALUE_LIMIT)}" for k, v in picked[:MAX_SUMMARY_STYLES])
+
+
+def _source_text(pick: Pick) -> str:
+    src = pick.framework.source
+    if src is not None:
+        return f"{src.file}:{src.line}:{src.column} ({src.precision})"
+    return "source unknown"
+
+
+def _repeat_text(pick: Pick) -> str | None:
+    r = pick.repeat
+    if r is None or r.count <= 1:
+        return None
+    return f"repeated {r.count}×, instance {r.index + 1}"
+
+
+def _region_contents(pick: Pick, top: int = 5) -> str:
+    assert pick.region is not None
+    items: list[str] = []
+    for e in pick.region.elements[:top]:
+        name = e.selector.split(">")[-1].strip() or e.tag
+        text = _clip(e.text, 30)
+        items.append(f'{name} "{text}"' if text else name)
+    return ", ".join(items)
+
+
 def render_pick_summary(pick: Pick) -> str:
-    """One-line pick summary (SPEC §6.9 example format)."""
+    """One-line pick summary (SPEC §6.9 format)."""
     parts: list[str] = []
-    if pick.element is not None:
-        parts.append(pick.element.selector)
-    elif pick.region is not None:
-        parts.append(f"region with {len(pick.region.elements)} elements")
+    if pick.kind == "region" and pick.region is not None:
+        r = pick.region.rect
+        parts.append(f"region {_num(r.w)}×{_num(r.h)} at ({_num(r.x)},{_num(r.y)})")
+        contents = _region_contents(pick)
+        if contents:
+            parts.append(f"contains: {contents} (top {min(5, len(pick.region.elements))})")
+    else:
+        parts.append(pick_label(pick))
     chain = [c.name for c in pick.framework.component_chain if c.name]
     if chain:
         parts.append(chain[0])
-    src = pick.framework.source
-    if src is not None:
-        parts.append(f"{src.file}:{src.line}:{src.column} ({src.precision})")
-    if pick.repeat is not None:
-        parts.append(f"repeated {pick.repeat.count}x, instance {pick.repeat.index}")
-    if pick.element is not None and pick.element.computed_styles:
-        styles = "; ".join(f"{k} {v}" for k, v in list(pick.element.computed_styles.items())[:6])
-        parts.append(styles)
+    if pick.kind == "element" or pick.framework.source is not None:
+        parts.append(_source_text(pick))
+    repeat = _repeat_text(pick)
+    if repeat:
+        parts.append(repeat)
+    if pick.element is not None:
+        styles = _summary_styles(pick.element.computed_styles)
+        if styles:
+            parts.append(styles)
     return f"[{pick.id}] " + " — ".join(parts)
+
+
+def render_picks_section(refs: Sequence[PickRef]) -> list[str]:
+    """The "Picks:" lines for a talker turn (empty when there are none)."""
+    if not refs:
+        return []
+    lines = ["Picks:"]
+    for ref in refs:
+        lines.append(
+            f"[{ref}] (no longer available)" if isinstance(ref, int) else render_pick_summary(ref)
+        )
+    return lines
+
+
+def pick_payload_json(pick: Pick) -> str:
+    """The full normalised pick as JSON (the talker's get_pick tool)."""
+    return json.dumps(pick.model_dump(mode="json", by_alias=True), ensure_ascii=False)
+
+
+def render_pick_full(pick: Pick) -> str:
+    """A pick in full but compact, for the worker prompt."""
+    lines = [f"[{pick.id}] {pick.kind}"]
+    page = pick.page
+    lines.append(f"  page: {page.url} (route {page.route}, {page.color_scheme} scheme)")
+    el = pick.element
+    if el is not None:
+        lines.append(f"  selector: {el.selector}")
+        if el.alt_selectors:
+            lines.append(f"  alt selectors: {'; '.join(el.alt_selectors)}")
+        lines.append(f"  tag: {el.tag}")
+        if el.attributes:
+            attrs = " ".join(f'{k}="{_clip(v, 120)}"' for k, v in el.attributes.items())
+            lines.append(f"  attributes: {attrs}")
+        if el.text:
+            lines.append(f"  text: {_clip(el.text, 200)}")
+        lines.append(f"  html: {_clip(el.outer_html, _HTML_LIMIT)}")
+        if el.computed_styles:
+            styles = "; ".join(f"{k}: {v}" for k, v in el.computed_styles.items())
+            lines.append(f"  computed styles: {styles}")
+    if pick.region is not None:
+        r = pick.region.rect
+        lines.append(f"  region: {_num(r.w)}×{_num(r.h)} at ({_num(r.x)},{_num(r.y)})")
+        for e in pick.region.elements:
+            lines.append(f"    - {e.selector} {_clip(e.text, 60)}".rstrip())
+    fw = pick.framework
+    version = f" {fw.version}" if fw.version else ""
+    lines.append(f"  framework: {fw.name}{version}")
+    if fw.source is not None:
+        lines.append(f"  source: {_source_text(pick)}")
+    else:
+        lines.append("  source: unknown (search the repo for the component, classes or text)")
+    if fw.component_chain:
+        chain: list[str] = []
+        for c in fw.component_chain:
+            where = ""
+            if c.file:
+                where = f" ({c.file}:{c.line}:{c.column})" if c.line is not None else f" ({c.file})"
+            chain.append(f"{c.name}{where}")
+        lines.append("  component chain (innermost first; each file is where the tag is written):")
+        lines += [f"    - {c}" for c in chain]
+    if fw.props is not None:
+        props = _clip(json.dumps(fw.props, ensure_ascii=False, default=str), _PROPS_LIMIT)
+        lines.append(f"  props: {props}")
+    repeat = _repeat_text(pick)
+    if repeat:
+        lines.append(f"  {repeat} (one of several on the page that share this source)")
+    return "\n".join(lines)
 
 
 def _section(title: str, items: Sequence[str]) -> list[str]:
@@ -119,7 +276,10 @@ def render_page(page: PageContext) -> str:
 
 
 def render_worker_prompt(
-    task: Task, picks: Sequence[Pick] = (), screenshot_attached: bool | None = None
+    task: Task,
+    picks: Sequence[Pick] = (),
+    screenshot_attached: bool | None = None,
+    pick_images: bool = False,
 ) -> str:
     """The worker's prompt for one task. `screenshot_attached` defaults to whether the
     task's page has a screenshot ref; pass False when the image couldn't be loaded."""
@@ -132,7 +292,15 @@ def render_worker_prompt(
     if brief.notes:
         lines += ["Notes:", brief.notes, ""]
     if picks:
-        lines += _section("Picked elements", [render_pick_summary(p) for p in picks])
+        lines += ["Picked elements (the [n] markers in the brief refer to these):"]
+        lines += [render_pick_full(p) for p in picks]
+        lines += [""]
+        if pick_images:
+            lines += [
+                "Screenshots of each picked element follow the page screenshot, labelled "
+                '"[n] crop" (the element) and "[n] viewport" (the page, element outlined).',
+                "",
+            ]
     page = task.page
     if page is not None:
         v = page.viewport
@@ -154,6 +322,16 @@ def render_worker_prompt(
             "change shared components, layouts or global styles used on other pages "
             "unless the brief asks for that."
         )
+    if picks:
+        lines += [
+            "- Start from the picked elements' source locations: open the file, find the "
+            "element at that line, and edit there. If a source is unknown, search for the "
+            "component name, class names or text shown above.",
+            "- A pick marked 'repeated N×' (N > 1) is one of several instances rendered by "
+            "the same template. Edit the template/component that renders them all, not one "
+            "copy, unless the brief says to change only that instance.",
+            "- Don't change unrelated instances, components or pages.",
+        ]
     lines += [
         "- Make the change described above. Keep it minimal and focused on the brief.",
         "- Never run git push.",
@@ -169,7 +347,7 @@ def render_worker_prompt(
 def render_talker_turn(
     text: str,
     notes: Sequence[str] = (),
-    picks: Sequence[Pick] = (),
+    picks: Sequence[PickRef] = (),
     page: PageContext | None = None,
     screenshot_attached: bool | None = None,
 ) -> str:
@@ -181,8 +359,7 @@ def render_talker_turn(
         if bool(page.screenshot) if screenshot_attached is None else screenshot_attached:
             lines.append("A screenshot of what the user currently sees is attached.")
     lines.append(f"User: {text}")
-    if picks:
-        lines += ["Picks:", *(render_pick_summary(p) for p in picks)]
+    lines += render_picks_section(picks)
     return "\n".join(lines)
 
 

@@ -132,6 +132,11 @@ class RepoDirs:
         return self.root / "sessions.json"
 
     @property
+    def tasks(self) -> Path:
+        """Per-task state: `tasks/<task_id>/picks.json` (SPEC §6.5)."""
+        return self.root / "tasks"
+
+    @property
     def notes(self) -> Path:
         return self.root / "notes.md"
 

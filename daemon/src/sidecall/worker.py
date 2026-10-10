@@ -181,9 +181,13 @@ class ClaudeWorker:
         files: list[str] = []
         try:
             image = self._screenshot(task)
-            prompt = render_worker_prompt(task, screenshot_attached=image is not None)
+            picks = self.session.task_picks(task)
+            extra = self.session.worker_images(picks)
+            prompt = render_worker_prompt(
+                task, picks, screenshot_attached=image is not None, pick_images=bool(extra)
+            )
             client = await self._ensure_client()
-            await client.query(sdk_prompt(prompt, image))
+            await client.query(sdk_prompt(prompt, image, extra))
             result: ResultMessage | None = None
             async for msg in client.receive_response():
                 if isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:

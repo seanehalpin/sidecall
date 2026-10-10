@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
-from helpers import make_brief
+from helpers import make_brief, make_pick
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from sidecall.config import Config
-from sidecall.protocol.models import Task
+from sidecall.protocol.models import Pick, Target, Task
 from sidecall.server import Daemon, PairingCode, create_app, normalise_origin
 from sidecall.session import OnDelta, OnEvent, RepoSession, WorkerResult
-from sidecall.uploads import MAX_UPLOAD_BYTES, Image
+from sidecall.talker import MCP_TOOL_NAMES, build_tools
+from sidecall.uploads import MAX_UPLOAD_BYTES, Image, LabelledImage
 
 EXT_ORIGIN = "chrome-extension://kcjkimilmanlonlplfancfpoekkphjhb"
 APP = "http://localhost:5173"
@@ -38,14 +40,22 @@ class FakeTalker:
         self.session = session
         self.prompts: list[str] = []
         self.images: list[Image | None] = []
+        self.extras: list[Sequence[LabelledImage]] = []
         self.interrupts = 0
         self._interrupted = asyncio.Event()
         FakeTalker.instances.append(self)
 
-    async def reply(self, prompt: str, on_delta: OnDelta, image: Image | None = None) -> str:
+    async def reply(
+        self,
+        prompt: str,
+        on_delta: OnDelta,
+        image: Image | None = None,
+        extra_images: Sequence[LabelledImage] = (),
+    ) -> str:
         self.prompts.append(prompt)
         self.images.append(image)
-        text = prompt.splitlines()[-1].removeprefix("User: ")
+        self.extras.append(extra_images)
+        text = next(ln for ln in prompt.splitlines() if ln.startswith("User: "))[len("User: ") :]
         if text == "hang":
             on_delta("Thinking")
             await self._interrupted.wait()
@@ -352,7 +362,7 @@ def test_not_implemented(client: TestClient, config: Config, repo: Path) -> None
         msg = ws.receive_json()
         assert msg["payload"]["code"] == "not_implemented"
         send(ws, "pong", {"seq": 1})  # ignored, no reply
-        send(ws, "picks.clear")
+        send(ws, "call.end")
         assert ws.receive_json()["payload"]["code"] == "not_implemented"
     finally:
         ws.__exit__(None, None, None)
@@ -668,3 +678,185 @@ def test_turn_with_page_reaches_talker_and_task(
         assert "Page:" not in talker.prompts[-1]
     finally:
         ws.__exit__(None, None, None)
+
+
+# --- picks ---------------------------------------------------------------------------
+
+
+def wire(pick: Pick) -> Msg:
+    return pick.model_dump(mode="json", by_alias=True)
+
+
+def session_of(daemon: Daemon) -> RepoSession:
+    return next(iter(daemon.sessions.values()))
+
+
+def seed_repo(repo: Path) -> None:
+    (repo / "src/lib").mkdir(parents=True)
+    (repo / "src/lib/Card.svelte").write_text("<div class='card-header'></div>\n")
+
+
+def test_pick_add_remove_clear(
+    client: TestClient, daemon: Daemon, config: Config, repo: Path
+) -> None:
+    seed_repo(repo)
+    ws = bound(client, config, repo)
+    try:
+        send(ws, "pick.add", wire(make_pick(1, file="src/lib/Card.svelte", line=1, column=0)))
+        send(ws, "pick.add", wire(make_pick(2, file="src/lib/Gone.svelte")))
+        send(ws, "user.text", {"text": "chat", "pickIds": []})  # a barrier: handled in order
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        picks = session_of(daemon).picks
+        one, two = picks.get(1), picks.get(2)
+        assert one is not None and one.framework.source is not None
+        assert one.framework.source.column == 1  # svelte: 0-based -> 1-based
+        assert one.framework.component_chain[0].file == "src/lib/Card.svelte"
+        assert two is not None and two.framework.source is None  # file doesn't exist
+
+        send(ws, "pick.add", wire(make_pick(1, file="src/lib/Card.svelte", line=7, column=0)))
+        send(ws, "pick.remove", {"id": 2})
+        send(ws, "pick.remove", {"id": 99})  # unknown ids are ignored
+        send(ws, "user.text", {"text": "chat", "pickIds": []})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        assert 2 not in picks and len(picks) == 1
+        updated = picks.get(1)
+        assert updated is not None and updated.framework.source is not None
+        assert updated.framework.source.line == 7  # newest wins
+
+        send(ws, "picks.clear")
+        send(ws, "user.text", {"text": "chat", "pickIds": []})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        assert len(picks) == 0
+    finally:
+        ws.__exit__(None, None, None)
+
+
+def test_bad_pick_add_is_a_bad_message(client: TestClient, config: Config, repo: Path) -> None:
+    ws = bound(client, config, repo)
+    try:
+        send(ws, "pick.add", {"id": 1})
+        assert ws.receive_json()["payload"]["code"] == "bad_message"
+    finally:
+        ws.__exit__(None, None, None)
+
+
+def test_user_text_with_picks_reaches_the_talker(
+    client: TestClient, daemon: Daemon, config: Config, repo: Path
+) -> None:
+    seed_repo(repo)
+    crop = upload(client, config.token).json()["ref"]
+    viewport = upload(client, config.token).json()["ref"]
+    ws = bound(client, config, repo)
+    try:
+        pick = make_pick(
+            1, file="src/lib/Card.svelte", repeat=(12, 2), screenshots=(crop, viewport)
+        )
+        send(ws, "pick.add", wire(pick))
+        send(ws, "pick.add", wire(make_pick(2, screenshots=("f" * 32, viewport))))  # crop is gone
+        send(ws, "user.text", {"text": "chat", "pickIds": [1, 2, 9]})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        talker = FakeTalker.instances[-1]
+        lines = talker.prompts[-1].splitlines()
+        assert lines[0] == "User: chat"
+        assert lines[1] == "Picks:"
+        assert lines[2].startswith("[1] div.card-header — CardHeader — src/lib/Card.svelte:")
+        assert "repeated 12×, instance 3" in lines[2]
+        assert lines[3].startswith("[2] ")
+        assert lines[4] == "[9] (no longer available)"
+        assert [e.label for e in talker.extras[-1]] == ["[1] crop"]  # missing crops are skipped
+        assert talker.extras[-1][0].image == Image(JPEG, "image/jpeg")
+    finally:
+        ws.__exit__(None, None, None)
+
+
+def test_turn_images_are_capped_with_the_page_screenshot_first(
+    client: TestClient, config: Config, repo: Path
+) -> None:
+    ref = upload(client, config.token).json()["ref"]
+    page = {
+        "url": f"{APP}/",
+        "route": "/",
+        "title": "T",
+        "viewport": {"w": 1, "h": 1, "dpr": 1},
+        "screenshot": ref,
+    }
+    ws = bound(client, config, repo)
+    try:
+        for i in range(1, 9):
+            send(ws, "pick.add", wire(make_pick(i, screenshots=(ref, ref))))
+        send(ws, "user.text", {"text": "chat", "pickIds": list(range(1, 9)), "page": page})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        talker = FakeTalker.instances[-1]
+        assert talker.images[-1] is not None
+        assert [e.label for e in talker.extras[-1]] == [f"[{i}] crop" for i in range(1, 6)]
+    finally:
+        ws.__exit__(None, None, None)
+
+
+def test_task_snapshots_picks_and_survives_restart(config: Config, repo: Path) -> None:
+    seed_repo(repo)
+    config.map_repo(APP, repo)
+    with TestClient(create_app(make_daemon(config))) as c, connect(c) as ws:
+        hello(ws, config.token, APP)
+        ws.receive_json()
+        send(ws, "pick.add", wire(make_pick(1, file="src/lib/Card.svelte", repeat=(3, 0))))
+        send(ws, "pick.add", wire(make_pick(2, file="src/lib/Card.svelte")))
+        send(ws, "user.text", {"text": "slow 1", "pickIds": [1, 5]})
+        created, _ = until(ws, "task.created")
+        assert created["payload"]["pickIds"] == [1]  # only existing ids
+        task_id = created["payload"]["id"]
+        # later clears and id reuse can't change the queued task
+        send(ws, "picks.clear")
+        send(ws, "pick.add", wire(make_pick(1, file="src/lib/Card.svelte", line=99)))
+        send(ws, "user.text", {"text": "chat", "pickIds": []})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+
+    daemon2 = make_daemon(config)
+    with TestClient(create_app(daemon2)) as c, connect(c) as ws:
+        hello(ws, config.token, APP)
+        ws.receive_json()
+        session = session_of(daemon2)
+        assert len(session.picks) == 0  # the store is per daemon run
+        task = session.get_task(task_id)
+        assert task is not None and task.pick_ids == [1]
+        (pick,) = session.task_picks(task)
+        assert pick.framework.source is not None and pick.framework.source.line == 14
+        assert pick.repeat is not None and pick.repeat.count == 3
+
+
+async def test_target_pick_ids_join_the_turns_picks(daemon: Daemon, repo: Path) -> None:
+    seed_repo(repo)
+    session = daemon.get_session(repo)
+    session.add_pick(make_pick(1, file="src/lib/Card.svelte"))
+    session.add_pick(make_pick(2, file="src/lib/Card.svelte"))
+    session.add_pick(make_pick(3, file="src/lib/Card.svelte"))
+    brief = make_brief("x")
+    brief.targets = [Target(pick_id=3, description="a"), Target(pick_id=77, description="b")]
+    session._turn_picks = [p for p in session.picks.resolve([1, 3]) if isinstance(p, Pick)]  # pyright: ignore[reportPrivateUsage]
+    task = session.dispatch(brief)
+    assert task.pick_ids == [3, 1]
+    assert [p.id for p in session.task_picks(task)] == [3, 1]
+    session._turn_picks = []  # pyright: ignore[reportPrivateUsage]
+    assert session.dispatch(make_brief("y")).pick_ids == []
+    assert session.request_undo().pick_ids == []
+
+
+async def test_get_pick_tool(daemon: Daemon, repo: Path) -> None:
+    seed_repo(repo)
+    session = daemon.get_session(repo)
+    session.add_pick(make_pick(1, file="src/lib/Card.svelte", repeat=(12, 2)))
+    tools = {t.name: t for t in build_tools(session)}
+    assert "get_pick" in tools
+    assert "mcp__sidecall__get_pick" in MCP_TOOL_NAMES
+    ok = await tools["get_pick"].handler({"id": 1})
+    data = json.loads(ok["content"][0]["text"])
+    assert data["id"] == 1
+    assert data["framework"]["source"]["file"] == "src/lib/Card.svelte"
+    assert data["framework"]["source"]["column"] == 4  # normalised: 3 + 1 (svelte)
+    assert data["element"]["outerHTML"] and data["element"]["computedStyles"]
+    assert data["repeat"] == {"count": 12, "index": 2}
+    assert "is_error" not in ok
+    missing = await tools["get_pick"].handler({"id": 2})
+    assert missing["is_error"] and "No pick" in missing["content"][0]["text"]
+    bad = await tools["get_pick"].handler({"id": "x"})
+    assert bad["is_error"]

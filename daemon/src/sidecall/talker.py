@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from claude_agent_sdk import (
@@ -21,10 +22,10 @@ from claude_agent_sdk import (
 )
 from pydantic import ValidationError
 
-from .prompts import TALKER_SYSTEM_PROMPT, brief_tool_schema
+from .prompts import TALKER_SYSTEM_PROMPT, brief_tool_schema, pick_payload_json
 from .protocol.models import Brief, Task
 from .session import OnDelta
-from .uploads import Image, sdk_prompt
+from .uploads import Image, LabelledImage, sdk_prompt
 
 if TYPE_CHECKING:
     from .session import RepoSession
@@ -33,7 +34,14 @@ log = logging.getLogger(__name__)
 
 SERVER_NAME = "sidecall"
 READ_TOOLS = ["Read", "Grep", "Glob"]
-TOOL_NAMES = ["dispatch_task", "list_tasks", "get_task_status", "cancel_task", "request_undo"]
+TOOL_NAMES = [
+    "dispatch_task",
+    "list_tasks",
+    "get_task_status",
+    "cancel_task",
+    "request_undo",
+    "get_pick",
+]
 MCP_TOOL_NAMES = [f"mcp__{SERVER_NAME}__{name}" for name in TOOL_NAMES]
 DISALLOWED_TOOLS = ["Edit", "Write", "Bash", "NotebookEdit"]
 
@@ -111,7 +119,24 @@ def build_tools(session: RepoSession) -> list[SdkMcpTool[Any]]:
         task = session.request_undo()
         return _text(f"Queued undo as task {task.id}.")
 
-    return [dispatch_task, list_tasks, get_task_status, cancel_task, request_undo]
+    @tool(
+        "get_pick",
+        "Get the full payload of a picked element by its [n] id: outerHTML, attributes, all "
+        "computed styles, props, component chain, page info, repeat info and screenshot refs. "
+        "Use it when the inline summary isn't enough.",
+        {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]},
+    )
+    async def get_pick(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            pick_id = int(args.get("id"))  # pyright: ignore[reportArgumentType]
+        except (TypeError, ValueError):
+            return _text("id must be an integer.", error=True)
+        pick = session.picks.get(pick_id)
+        if pick is None:
+            return _text("No pick with that id (it may have been cleared).", error=True)
+        return _text(pick_payload_json(pick))
+
+    return [dispatch_task, list_tasks, get_task_status, cancel_task, request_undo, get_pick]
 
 
 def build_mcp_server(session: RepoSession) -> dict[str, Any]:
@@ -201,7 +226,13 @@ class ClaudeTalker:
             self._client = client
         return self._client
 
-    async def reply(self, prompt: str, on_delta: OnDelta, image: Image | None = None) -> str:
+    async def reply(
+        self,
+        prompt: str,
+        on_delta: OnDelta,
+        image: Image | None = None,
+        extra_images: Sequence[LabelledImage] = (),
+    ) -> str:
         client = await self._ensure_client()
         streamed: list[str] = []
         fallback: list[str] = []
@@ -213,7 +244,7 @@ class ClaudeTalker:
             on_delta(text)
 
         try:
-            await client.query(sdk_prompt(prompt, image))
+            await client.query(sdk_prompt(prompt, image, extra_images))
             async for msg in client.receive_response():
                 if isinstance(msg, StreamEvent):
                     if msg.parent_tool_use_id is not None:

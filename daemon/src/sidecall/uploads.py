@@ -8,7 +8,7 @@ import logging
 import re
 import secrets
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -94,13 +94,31 @@ class UploadStore:
 # --- SDK streaming input -----------------------------------------------------------
 
 
-def user_message(text: str, image: Image | None = None) -> dict[str, Any]:
-    """A streaming-input user message: text, plus an image block when given
-    (shape verified in spikes/agent-sdk/s4_image.py)."""
+@dataclass(frozen=True)
+class LabelledImage:
+    """An extra image sent after the page screenshot, preceded by a text label
+    such as "[1] crop"."""
+
+    label: str
+    image: Image
+
+
+def _image_block(image: Image) -> dict[str, Any]:
+    source = {"type": "base64", "media_type": image.media_type, "data": image.base64()}
+    return {"type": "image", "source": source}
+
+
+def user_message(
+    text: str, image: Image | None = None, extra: Sequence[LabelledImage] = ()
+) -> dict[str, Any]:
+    """A streaming-input user message: text, then the page image when given, then each
+    labelled extra image (shape verified in spikes/agent-sdk/s4_image.py)."""
     content: list[dict[str, Any]] = [{"type": "text", "text": text}]
     if image is not None:
-        source = {"type": "base64", "media_type": image.media_type, "data": image.base64()}
-        content.append({"type": "image", "source": source})
+        content.append(_image_block(image))
+    for item in extra:
+        content.append({"type": "text", "text": item.label})
+        content.append(_image_block(item.image))
     return {
         "type": "user",
         "message": {"role": "user", "content": content},
@@ -112,7 +130,11 @@ async def one_message(message: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
     yield message
 
 
-def sdk_prompt(text: str, image: Image | None) -> str | AsyncIterator[dict[str, Any]]:
+def sdk_prompt(
+    text: str, image: Image | None, extra: Sequence[LabelledImage] = ()
+) -> str | AsyncIterator[dict[str, Any]]:
     """What to pass to `ClaudeSDKClient.query`: plain text, or a one-message stream
-    with the image attached."""
-    return text if image is None else one_message(user_message(text, image))
+    with the images attached."""
+    if image is None and not extra:
+        return text
+    return one_message(user_message(text, image, extra))

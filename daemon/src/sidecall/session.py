@@ -11,7 +11,7 @@ import contextlib
 import logging
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
@@ -19,7 +19,8 @@ from typing import Literal, Protocol
 from .approvals import ApprovalBroker
 from .config import RepoDirs
 from .paths import normalise_brief
-from .prompts import UNDO_BRIEF, render_talker_turn, task_note
+from .picks import PickStore, load_snapshot, normalise_pick, save_snapshot
+from .prompts import UNDO_BRIEF, PickRef, render_talker_turn, task_note
 from .protocol.messages import (
     AgentTextDelta,
     AgentTextDeltaPayload,
@@ -44,6 +45,7 @@ from .protocol.messages import (
 from .protocol.models import (
     Brief,
     PageContext,
+    Pick,
     Preset,
     RepoInfo,
     RepoState,
@@ -54,7 +56,7 @@ from .protocol.models import (
 )
 from .queue import TaskQueue
 from .state import SessionStore, TranscriptStore
-from .uploads import Image, UploadStore
+from .uploads import Image, LabelledImage, UploadStore
 
 log = logging.getLogger(__name__)
 
@@ -64,9 +66,15 @@ OnEvent = Callable[[TaskEventKind, str], None]
 
 
 class Talker(Protocol):
-    async def reply(self, prompt: str, on_delta: OnDelta, image: Image | None = None) -> str:
-        """Run one turn (with an optional screenshot), streaming text through
-        `on_delta`; return the full text."""
+    async def reply(
+        self,
+        prompt: str,
+        on_delta: OnDelta,
+        image: Image | None = None,
+        extra_images: Sequence[LabelledImage] = (),
+    ) -> str:
+        """Run one turn (with an optional page screenshot, then labelled pick crops),
+        streaming text through `on_delta`; return the full text."""
         ...
 
     async def interrupt(self) -> None: ...
@@ -88,6 +96,12 @@ class Worker(Protocol):
     async def interrupt(self) -> None: ...
 
     async def close(self) -> None: ...
+
+
+MAX_TURN_IMAGES = 6
+"""Images per talker turn, the page screenshot included."""
+MAX_WORKER_PICKS_WITH_VIEWPORT = 6
+MAX_WORKER_IMAGES = 20
 
 
 TalkerFactory = Callable[["RepoSession"], Talker]
@@ -126,6 +140,7 @@ class RepoSession:
         self.transcript = TranscriptStore(self.dirs.transcripts)
         self.sessions = SessionStore(self.dirs.sessions)
         self.uploads = UploadStore(home)
+        self.picks = PickStore()
         self.approvals = ApprovalBroker(
             emit, on_blocked=self._on_blocked, on_unblocked=self._on_unblocked
         )
@@ -136,6 +151,8 @@ class RepoSession:
         self._talker_busy = False
         # The page of the talker turn in progress; tasks it dispatches inherit it.
         self._turn_page: PageContext | None = None
+        # The picks of that turn, as the talker saw them (immune to later pick.remove).
+        self._turn_picks: list[Pick] = []
         self._unseen: list[str] = []
         self._cancel_requested: set[str] = set()
         self._wake = asyncio.Event()
@@ -220,6 +237,53 @@ class RepoSession:
         )
         return entry
 
+    # --- picks ---
+
+    def add_pick(self, pick: Pick) -> Pick:
+        """Normalise (SPEC §5.4) and store a pick sent by the extension."""
+        normalised = normalise_pick(pick, self.repo_path)
+        self.picks.add(normalised)
+        return normalised
+
+    def remove_pick(self, pick_id: int) -> bool:
+        return self.picks.remove(pick_id)
+
+    def clear_picks(self) -> None:
+        self.picks.clear()
+
+    def task_picks(self, task: Task) -> list[Pick]:
+        """The picks a task was dispatched with, from its snapshot (survives restarts)."""
+        if not task.pick_ids:
+            return []
+        wanted = set(task.pick_ids)
+        return [p for p in load_snapshot(self.dirs.tasks / task.id) if p.id in wanted]
+
+    def _crops(self, picks: Sequence[Pick], limit: int) -> list[LabelledImage]:
+        out: list[LabelledImage] = []
+        for pick in picks:
+            if len(out) >= limit:
+                break
+            image = self.uploads.load(pick.screenshots.crop) if pick.screenshots else None
+            if image is not None:
+                out.append(LabelledImage(f"[{pick.id}] crop", image))
+        return out
+
+    def worker_images(self, picks: Sequence[Pick]) -> list[LabelledImage]:
+        """Per pick, the crop then the viewport screenshot (viewport only for the first
+        few picks); missing uploads are skipped."""
+        out: list[LabelledImage] = []
+        for i, pick in enumerate(picks):
+            if pick.screenshots is None:
+                continue
+            refs = [("crop", pick.screenshots.crop)]
+            if i < MAX_WORKER_PICKS_WITH_VIEWPORT:
+                refs.append(("viewport", pick.screenshots.viewport))
+            for kind, ref in refs:
+                image = self.uploads.load(ref)
+                if image is not None and len(out) < MAX_WORKER_IMAGES:
+                    out.append(LabelledImage(f"[{pick.id}] {kind}", image))
+        return out
+
     # --- user turns (talker) ---
 
     def submit_user_text(
@@ -230,27 +294,38 @@ class RepoSession:
     ) -> asyncio.Task[None]:
         """Record the user's text now and run the talker turn in the background."""
         self._add_transcript("user", text, pick_ids=pick_ids)
-        task = asyncio.create_task(self._user_turn(text, page))
+        refs = self.picks.resolve(pick_ids or [])
+        task = asyncio.create_task(self._user_turn(text, page, refs))
         self._bg.add(task)
         task.add_done_callback(self._bg.discard)
         return task
 
-    async def _user_turn(self, text: str, page: PageContext | None = None) -> None:
+    async def _user_turn(
+        self, text: str, page: PageContext | None = None, refs: Sequence[PickRef] = ()
+    ) -> None:
         # A new user turn interrupts the talker's current reply (SPEC §9.2).
         if self._talker_busy and self._talker is not None:
             with contextlib.suppress(Exception):
                 await self._talker.interrupt()
         async with self._talker_lock:
-            await self._run_talker_turn(text, page)
+            await self._run_talker_turn(text, page, refs)
 
-    async def _run_talker_turn(self, text: str, page: PageContext | None = None) -> None:
+    async def _run_talker_turn(
+        self, text: str, page: PageContext | None = None, refs: Sequence[PickRef] = ()
+    ) -> None:
         notes, self._unseen = self._unseen, []
         image: Image | None = None
         if page is not None and page.screenshot:
             image = await asyncio.to_thread(self.uploads.load, page.screenshot)
             if image is None:
                 log.warning("screenshot %s not found; sending the turn without it", page.screenshot)
-        prompt = render_talker_turn(text, notes, page=page, screenshot_attached=image is not None)
+        picks = [r for r in refs if isinstance(r, Pick)]
+        crops = await asyncio.to_thread(
+            self._crops, picks, MAX_TURN_IMAGES - (1 if image is not None else 0)
+        )
+        prompt = render_talker_turn(
+            text, notes, picks=refs, page=page, screenshot_attached=image is not None
+        )
         turn_id = _new_id()
         parts: list[str] = []
 
@@ -260,11 +335,12 @@ class RepoSession:
 
         self._talker_busy = True
         self._turn_page = page
+        self._turn_picks = picks
         full = ""
         try:
             if self._talker is None:
                 self._talker = self._talker_factory(self)
-            full = await self._talker.reply(prompt, on_delta, image)
+            full = await self._talker.reply(prompt, on_delta, image, crops)
         except Exception as exc:
             log.exception("talker turn failed")
             self._unseen = notes + self._unseen
@@ -278,6 +354,7 @@ class RepoSession:
         finally:
             self._talker_busy = False
             self._turn_page = None
+            self._turn_picks = []
         reply = (full or "".join(parts)).strip()
         self._emit(AgentTextDone(payload=AgentTextDonePayload(turn_id=turn_id)))
         if reply:
@@ -287,17 +364,34 @@ class RepoSession:
 
     def dispatch(self, brief: Brief) -> Task:
         """Queue a task from the talker; it carries the page of the current turn."""
-        return self._enqueue(brief, self._turn_page)
+        return self._enqueue(brief, self._turn_page, self._dispatch_picks(brief))
 
-    def _enqueue(self, brief: Brief, page: PageContext | None) -> Task:
+    def _dispatch_picks(self, brief: Brief) -> list[Pick]:
+        """The brief's target picks plus the current turn's, existing ones only. A pick
+        the talker saw this turn wins over the store's copy (ids can be reused)."""
+        seen = {p.id: p for p in self._turn_picks}
+        ids = [t.pick_id for t in brief.targets if t.pick_id is not None]
+        ids += [p.id for p in self._turn_picks]
+        out: dict[int, Pick] = {}
+        for i in ids:
+            pick = seen.get(i) or self.picks.get(i)
+            if pick is not None:
+                out.setdefault(i, pick)
+        return list(out.values())
+
+    def _enqueue(self, brief: Brief, page: PageContext | None, picks: Sequence[Pick] = ()) -> Task:
         brief = normalise_brief(brief, self.repo_path)
         task = Task(
             id=_new_id(),
             title=brief.title,
             brief=brief,
             created_at=_now_ms(),
+            pick_ids=[p.id for p in picks],
             page=page.model_copy(deep=True) if page is not None else None,
         )
+        if picks:
+            # Snapshot now: later picks.clear or id reuse mustn't change a queued task.
+            save_snapshot(self.dirs.tasks / task.id, list(picks))
         self.queue.add(task)
         self._emit(TaskCreated(payload=task))
         self._emit_queue()

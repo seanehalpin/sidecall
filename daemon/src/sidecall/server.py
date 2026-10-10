@@ -31,6 +31,9 @@ from .protocol.messages import (
     PairRequest,
     PairResult,
     PairResultPayload,
+    PickAdd,
+    PickRemove,
+    PicksClear,
     Ping,
     Pong,
     RepoBrowse,
@@ -342,7 +345,10 @@ class Daemon:
                 conn.error("browse_cancelled", "No folder chosen.")
             else:
                 self.map_repo(conn, origin, path)
-        elif isinstance(msg, (UserText, TaskCancel, TaskReorder, SettingsUpdate)):
+        elif isinstance(
+            msg,
+            (UserText, TaskCancel, TaskReorder, SettingsUpdate, PickAdd, PickRemove, PicksClear),
+        ):
             await self._repo_message(conn, msg)
         elif isinstance(msg, ApprovalRespond):
             for session in self.sessions.values():
@@ -355,7 +361,15 @@ class Daemon:
         return True
 
     async def _repo_message(
-        self, conn: Connection, msg: UserText | TaskCancel | TaskReorder | SettingsUpdate
+        self,
+        conn: Connection,
+        msg: UserText
+        | TaskCancel
+        | TaskReorder
+        | SettingsUpdate
+        | PickAdd
+        | PickRemove
+        | PicksClear,
     ) -> None:
         session = conn.session
         if session is None:
@@ -365,6 +379,12 @@ class Daemon:
             text = msg.payload.text.strip()
             if text:
                 session.submit_user_text(text, msg.payload.pick_ids, msg.payload.page)
+        elif isinstance(msg, PickAdd):
+            session.add_pick(msg.payload)
+        elif isinstance(msg, PickRemove):
+            session.remove_pick(msg.payload.id)
+        elif isinstance(msg, PicksClear):
+            session.clear_picks()
         elif isinstance(msg, TaskCancel):
             if not await session.cancel(msg.payload.id):
                 conn.error("unknown_task", "No active task with that id.")
