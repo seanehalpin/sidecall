@@ -10,12 +10,19 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="run tests that talk to Claude Code (costs usage)",
     )
+    parser.addoption(
+        "--voice",
+        action="store_true",
+        default=False,
+        help="run slow tests that load the voice models (MLX, ~3 GB)",
+    )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if config.getoption("--integration"):
-        return
-    skip = pytest.mark.skip(reason="needs --integration")
-    for item in items:
-        if "integration" in item.keywords:
-            item.add_marker(skip)
+    for marker in ("integration", "voice"):
+        if config.getoption(f"--{marker}"):
+            continue
+        skip = pytest.mark.skip(reason=f"needs --{marker}")
+        for item in items:
+            if marker in item.keywords:
+                item.add_marker(skip)

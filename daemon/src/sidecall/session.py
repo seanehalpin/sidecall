@@ -206,6 +206,13 @@ class RepoSession:
     def _emit_queue(self) -> None:
         self._emit(QueueState(payload=QueueStatePayload(tasks=self.queue.all_tasks())))
 
+    def new_turn_id(self) -> str:
+        return _new_id()
+
+    def add_transcript(self, role: Role, text: str, *, turn_id: str | None = None) -> str:
+        """Append a transcript entry (voice turns, SPEC §6.8) and broadcast it."""
+        return self._add_transcript(role, text, turn_id=turn_id).turn_id
+
     def _add_transcript(
         self,
         role: Role,

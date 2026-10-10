@@ -24,7 +24,9 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .config import Config
 from .protocol.messages import (
-    ApprovalRespond,
+    CallEnd,
+    CallMute,
+    CallStart,
     ErrorMsg,
     ErrorPayload,
     Hello,
@@ -46,12 +48,25 @@ from .protocol.messages import (
     TaskCancel,
     TaskReorder,
     UserText,
+    WebRTCAnswer,
+    WebRTCAnswerPayload,
+    WebRTCIceIn,
+    WebRTCOffer,
     Welcome,
     WelcomePayload,
     parse_client,
 )
 from .session import RepoSession, TalkerFactory, WorkerFactory
 from .uploads import MAX_UPLOAD_BYTES, UploadStore, media_type_of
+from .voice.call import (
+    BackendFactory,
+    Call,
+    CallBackend,
+    CallError,
+    CallEvents,
+    TalkerFn,
+    echo_talker,
+)
 
 log = logging.getLogger(__name__)
 
@@ -150,6 +165,8 @@ class Connection:
         self.clock_offset = 0.0
         self.origin: str | None = None
         self.session: RepoSession | None = None
+        self.call: Call | None = None
+        self.call_tasks: set[asyncio.Task[None]] = set()
         self._out: asyncio.Queue[str | _Close] = asyncio.Queue()
         self._seq = 0
 
@@ -193,6 +210,16 @@ def _default_worker_factory(session: RepoSession):  # pragma: no cover - needs C
     return ClaudeWorker(session)
 
 
+def _default_backend_factory(events: CallEvents, talker: TalkerFn) -> CallBackend:
+    from .voice.pipeline import PipecatBackend  # heavy: Pipecat, aiortc, MLX
+
+    return PipecatBackend(events, talker)
+
+
+def _default_voice_talker(session: RepoSession) -> TalkerFn:
+    return echo_talker  # Phase 1 stub (M3); Phase 2 wires the real talker
+
+
 class Daemon:
     def __init__(
         self,
@@ -202,7 +229,11 @@ class Daemon:
         worker_factory: WorkerFactory = _default_worker_factory,
         browse: BrowseFn = choose_folder,
         ping_interval: float = PING_INTERVAL,
+        call_backend_factory: BackendFactory = _default_backend_factory,
+        voice_talker: Callable[[RepoSession], TalkerFn] = _default_voice_talker,
     ) -> None:
+        self.call_backend_factory = call_backend_factory
+        self.voice_talker = voice_talker
         self.config = config
         self.pairing = PairingCode()
         self.talker_factory = talker_factory
@@ -243,6 +274,8 @@ class Daemon:
                 conn.send(msg)
 
     async def close(self) -> None:
+        for conn in list(self.connections):
+            await self.end_call(conn)
         for session in list(self.sessions.values()):
             await session.close()
         self.sessions.clear()
@@ -298,6 +331,7 @@ class Daemon:
             pass
         finally:
             self.connections.discard(conn)
+            await self.end_call(conn)
             pinger.cancel()
             if closing:
                 await _wait(writer, 2.0)  # flush the error, then close with the code
@@ -350,14 +384,14 @@ class Daemon:
             (UserText, TaskCancel, TaskReorder, SettingsUpdate, PickAdd, PickRemove, PicksClear),
         ):
             await self._repo_message(conn, msg)
-        elif isinstance(msg, ApprovalRespond):
+        elif isinstance(msg, (CallStart, CallEnd, CallMute, WebRTCOffer, WebRTCIceIn)):
+            await self._call_message(conn, msg)
+        else:
             for session in self.sessions.values():
                 if session.respond_approval(msg.payload.id, msg.payload.allow):
                     break
             else:
                 conn.error("unknown_approval", "No pending approval with that id.")
-        else:
-            conn.error("not_implemented", f"{msg.type} is not implemented yet.")
         return True
 
     async def _repo_message(
@@ -393,6 +427,64 @@ class Daemon:
         elif msg.payload.preset is not None:
             session.set_preset(msg.payload.preset)
 
+    # --- calls (SPEC §6.8) ---
+
+    async def _call_message(
+        self, conn: Connection, msg: CallStart | CallEnd | CallMute | WebRTCOffer | WebRTCIceIn
+    ) -> None:
+        if isinstance(msg, WebRTCIceIn):
+            return  # non-trickle: the offer already carries every candidate
+        if isinstance(msg, CallEnd):
+            await self.end_call(conn)
+            return
+        if isinstance(msg, CallStart):
+            session = conn.session
+            if session is None:
+                conn.error("no_repo", "This connection isn't bound to a repo.")
+                return
+            if conn.call is not None:
+                conn.error("call_active", "A call is already active on this connection.")
+                return
+            conn.call = Call(
+                session,
+                conn.send,
+                self.call_backend_factory,
+                self.voice_talker(session),
+                on_closed=lambda call: _forget_call(conn, call),
+            )
+            return
+        call = conn.call
+        if call is None:
+            conn.error("no_call", "Send call.start first.")
+            return
+        if isinstance(msg, CallMute):
+            call.set_muted(msg.payload.muted)
+            return
+        # The first offer can wait several seconds for the voice models to load; don't
+        # block the socket's read loop meanwhile.
+        task = asyncio.create_task(self._answer(conn, call, msg.payload.sdp))
+        conn.call_tasks.add(task)
+        task.add_done_callback(conn.call_tasks.discard)
+
+    async def _answer(self, conn: Connection, call: Call, sdp: str) -> None:
+        try:
+            answer = await call.offer(sdp)
+        except CallError as exc:
+            conn.error(exc.code, str(exc))
+            return
+        except Exception as exc:
+            log.exception("voice call failed to start")
+            conn.error("call_failed", _short(f"The voice call couldn't start: {exc}"))
+            await call.end()
+            return
+        if not call.ended:
+            conn.send(WebRTCAnswer(payload=WebRTCAnswerPayload(sdp=answer)))
+
+    async def end_call(self, conn: Connection) -> None:
+        call, conn.call = conn.call, None
+        if call is not None:
+            await call.end()
+
     def bind(self, conn: Connection, raw_origin: str | None) -> None:
         origin = normalise_origin(raw_origin)
         if origin is None:
@@ -423,6 +515,11 @@ class Daemon:
         self._welcome(conn, origin, self.get_session(real))
 
     def _welcome(self, conn: Connection, origin: str, session: RepoSession) -> None:
+        if conn.call is not None and conn.call.session is not session:
+            call, conn.call = conn.call, None
+            task = asyncio.create_task(call.end())  # a call belongs to one repo
+            conn.call_tasks.add(task)
+            task.add_done_callback(conn.call_tasks.discard)
         conn.session = session
         conn.send(
             Welcome(
@@ -435,6 +532,11 @@ class Daemon:
         )
 
 
+def _forget_call(conn: Connection, call: Call) -> None:
+    if conn.call is call:
+        conn.call = None
+
+
 async def _wait(task: asyncio.Task[None], seconds: float) -> None:
     with contextlib.suppress(Exception):
         await asyncio.wait_for(asyncio.shield(task), seconds)
@@ -444,7 +546,7 @@ def _short(text: str, limit: int = 300) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def create_app(daemon: Daemon) -> Starlette:
+def create_app(daemon: Daemon, *, preload_voice: bool = False) -> Starlette:
     async def health(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
@@ -454,7 +556,14 @@ def create_app(daemon: Daemon) -> Starlette:
             removed = await asyncio.to_thread(daemon.uploads.prune)
             if removed:
                 log.info("pruned %d old uploads", removed)
+        preload: asyncio.Task[object] | None = None
+        if preload_voice:
+            from .voice.models import get_models
+
+            preload = asyncio.create_task(get_models())
         yield
+        if preload is not None and not preload.done():
+            preload.cancel()
         await daemon.close()
 
     return Starlette(

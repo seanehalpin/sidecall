@@ -355,15 +355,13 @@ def test_rehello_rebinds(
     assert [e.role for e in s2.transcript.recent()] == ["user", "agent"]
 
 
-def test_not_implemented(client: TestClient, config: Config, repo: Path) -> None:
+def test_webrtc_ice_is_ignored(client: TestClient, config: Config, repo: Path) -> None:
     ws = bound(client, config, repo)
     try:
-        send(ws, "call.start")
-        msg = ws.receive_json()
-        assert msg["payload"]["code"] == "not_implemented"
-        send(ws, "pong", {"seq": 1})  # ignored, no reply
-        send(ws, "call.end")
-        assert ws.receive_json()["payload"]["code"] == "not_implemented"
+        send(ws, "webrtc.ice", {"candidate": None})  # non-trickle: no reply
+        send(ws, "call.end")  # no call: no-op, no reply
+        send(ws, "call.mute", {"muted": True})
+        assert ws.receive_json()["payload"]["code"] == "no_call"
     finally:
         ws.__exit__(None, None, None)
 

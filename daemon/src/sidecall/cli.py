@@ -1,4 +1,4 @@
-"""`sidecall` command line. M1: `sidecall start [--port N]`."""
+"""`sidecall` command line: `sidecall start [--port N] [--preload-voice]`."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _banner(cfg: Config, port: int, code: str) -> str:
     )
 
 
-def start(port: int | None, verbose: bool) -> None:
+def start(port: int | None, verbose: bool, preload_voice: bool = False) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -42,7 +42,7 @@ def start(port: int | None, verbose: bool) -> None:
     code = daemon.pairing.issue()
     print(_banner(cfg, port, code), flush=True)
     uvicorn.run(
-        create_app(daemon),
+        create_app(daemon, preload_voice=preload_voice),
         host="127.0.0.1",
         port=port,
         log_level="warning",
@@ -56,6 +56,11 @@ def main(argv: list[str] | None = None) -> None:
     p_start = sub.add_parser("start", help="run the daemon")
     p_start.add_argument("--port", type=int, default=None)
     p_start.add_argument("-v", "--verbose", action="store_true")
+    p_start.add_argument(
+        "--preload-voice",
+        action="store_true",
+        help="load and warm the voice models at startup instead of on the first call",
+    )
     args = parser.parse_args(argv)
     if args.command == "start":
-        start(args.port, args.verbose)
+        start(args.port, args.verbose, args.preload_voice)
