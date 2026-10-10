@@ -58,15 +58,7 @@ from .protocol.messages import (
 )
 from .session import RepoSession, TalkerFactory, WorkerFactory
 from .uploads import MAX_UPLOAD_BYTES, UploadStore, media_type_of
-from .voice.call import (
-    BackendFactory,
-    Call,
-    CallBackend,
-    CallError,
-    CallEvents,
-    TalkerFn,
-    echo_talker,
-)
+from .voice.call import BackendFactory, Call, CallBackend, CallError, CallEvents
 
 log = logging.getLogger(__name__)
 
@@ -210,14 +202,10 @@ def _default_worker_factory(session: RepoSession):  # pragma: no cover - needs C
     return ClaudeWorker(session)
 
 
-def _default_backend_factory(events: CallEvents, talker: TalkerFn) -> CallBackend:
+def _default_backend_factory(events: CallEvents) -> CallBackend:
     from .voice.pipeline import PipecatBackend  # heavy: Pipecat, aiortc, MLX
 
-    return PipecatBackend(events, talker)
-
-
-def _default_voice_talker(session: RepoSession) -> TalkerFn:
-    return echo_talker  # Phase 1 stub (M3); Phase 2 wires the real talker
+    return PipecatBackend(events)
 
 
 class Daemon:
@@ -230,10 +218,8 @@ class Daemon:
         browse: BrowseFn = choose_folder,
         ping_interval: float = PING_INTERVAL,
         call_backend_factory: BackendFactory = _default_backend_factory,
-        voice_talker: Callable[[RepoSession], TalkerFn] = _default_voice_talker,
     ) -> None:
         self.call_backend_factory = call_backend_factory
-        self.voice_talker = voice_talker
         self.config = config
         self.pairing = PairingCode()
         self.talker_factory = talker_factory
@@ -449,7 +435,6 @@ class Daemon:
                 session,
                 conn.send,
                 self.call_backend_factory,
-                self.voice_talker(session),
                 on_closed=lambda call: _forget_call(conn, call),
             )
             return

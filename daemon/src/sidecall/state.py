@@ -31,6 +31,19 @@ class TranscriptStore:
 
     def append(self, entry: TranscriptEntry) -> None:
         self._recent.append(entry)
+        self._write(entry)
+
+    def replace(self, entry: TranscriptEntry) -> None:
+        """Update the entry with the same turnId and role (a continued voice turn). The
+        day file gets the new version too; loading keeps the last one."""
+        for i, old in enumerate(self._recent):
+            if old.turn_id == entry.turn_id and old.role == entry.role:
+                self._recent[i] = entry.model_copy(update={"ts": old.ts})
+                self._write(entry)
+                return
+        self.append(entry)
+
+    def _write(self, entry: TranscriptEntry) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
         day = datetime.fromtimestamp(entry.ts / 1000).strftime("%Y-%m-%d")
         with (self.directory / f"{day}.jsonl").open("a", encoding="utf-8") as f:
@@ -54,7 +67,21 @@ class TranscriptStore:
             entries = batch + entries
             if len(entries) >= TRANSCRIPT_MEMORY:
                 break
-        self._recent.extend(entries[-TRANSCRIPT_MEMORY:])
+        self._recent.extend(_dedupe(entries)[-TRANSCRIPT_MEMORY:])
+
+
+def _dedupe(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
+    """Replaced entries (same turnId and role) keep their first position, last text."""
+    index: dict[tuple[str, str], int] = {}
+    out: list[TranscriptEntry] = []
+    for entry in entries:
+        key = (entry.turn_id, entry.role)
+        if key in index:
+            out[index[key]] = entry.model_copy(update={"ts": out[index[key]].ts})
+        else:
+            index[key] = len(out)
+            out.append(entry)
+    return out
 
 
 class SessionData(Model):

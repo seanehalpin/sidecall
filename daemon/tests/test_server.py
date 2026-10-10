@@ -42,6 +42,8 @@ class FakeTalker:
         self.images: list[Image | None] = []
         self.extras: list[Sequence[LabelledImage]] = []
         self.interrupts = 0
+        self.spoken: list[bool] = []
+        self.warmed = 0
         self._interrupted = asyncio.Event()
         FakeTalker.instances.append(self)
 
@@ -51,11 +53,18 @@ class FakeTalker:
         on_delta: OnDelta,
         image: Image | None = None,
         extra_images: Sequence[LabelledImage] = (),
+        *,
+        spoken: bool = False,
     ) -> str:
         self.prompts.append(prompt)
         self.images.append(image)
         self.extras.append(extra_images)
-        text = next(ln for ln in prompt.splitlines() if ln.startswith("User: "))[len("User: ") :]
+        self.spoken.append(spoken)
+        users = [ln for ln in prompt.splitlines() if ln.startswith("User: ")]
+        if not users:  # an announcement: no user text
+            on_delta("Update.")
+            return "Update."
+        text = users[0][len("User: ") :]
         if text == "hang":
             on_delta("Thinking")
             await self._interrupted.wait()
@@ -73,6 +82,9 @@ class FakeTalker:
     async def interrupt(self) -> None:
         self.interrupts += 1
         self._interrupted.set()
+
+    async def warm(self) -> None:
+        self.warmed += 1
 
     async def close(self) -> None:
         pass

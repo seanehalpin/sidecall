@@ -108,3 +108,23 @@ def test_session_store_ignores_garbage(tmp_path: Path) -> None:
     path = tmp_path / "sessions.json"
     path.write_text("{not json")
     assert SessionStore(path).preset == "default"
+
+
+def test_transcript_replace_updates_entry_and_survives_reload(tmp_path: Path) -> None:
+    store = TranscriptStore(tmp_path / "t")
+    first = TranscriptEntry(turn_id="u1", role="user", text="make this", ts=1000.0)
+    store.append(first)
+    store.append(TranscriptEntry(turn_id="a1", role="agent", text="Sure.", ts=1001.0))
+    store.replace(first.model_copy(update={"text": "make this bigger", "ts": 1002.0}))
+    assert [(e.turn_id, e.text, e.ts) for e in store.recent()] == [
+        ("u1", "make this bigger", 1000.0),
+        ("a1", "Sure.", 1001.0),
+    ]
+    reloaded = TranscriptStore(tmp_path / "t")
+    assert [(e.turn_id, e.text, e.ts) for e in reloaded.recent()] == [
+        ("u1", "make this bigger", 1000.0),
+        ("a1", "Sure.", 1001.0),
+    ]
+    # Replacing an unknown entry appends it.
+    store.replace(TranscriptEntry(turn_id="u2", role="user", text="hi", ts=1003.0))
+    assert store.recent()[-1].text == "hi"

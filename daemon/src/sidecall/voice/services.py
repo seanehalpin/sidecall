@@ -42,6 +42,27 @@ from .models import (
 
 log = logging.getLogger(__name__)
 
+SKEW_WINDOW_FRAMES = 250
+"""About 5 s of 20 ms input frames."""
+TRAILING_KEEP_SECS = 0.2
+"""Silence kept after the last speech in a segment. Parakeet TDT stretches word times
+into trailing silence: with Pipecat's default 0.5 s pad plus VAD's 0.2 s the end of the
+last word came out ~0.35 s late; with 0.1-0.25 s it was within ~50 ms (measured)."""
+
+
+def trim_trailing_silence(audio: Float32Array, sample_rate: int) -> Float32Array:
+    """Cut a segment to TRAILING_KEEP_SECS after its last speech (20 ms RMS windows)."""
+    win = max(1, int(0.02 * sample_rate))
+    n = len(audio) // win
+    if n == 0:
+        return audio
+    rms = np.sqrt(np.mean(audio[: n * win].reshape(n, win) ** 2, axis=1))
+    loud = np.flatnonzero(rms > max(0.004, float(rms.max()) * 0.06))
+    if len(loud) == 0:
+        return audio
+    end = (int(loud[-1]) + 1) * win + int(TRAILING_KEEP_SECS * sample_rate)
+    return audio[: min(len(audio), end)]
+
 
 @dataclass
 class Word:
@@ -57,7 +78,9 @@ def tokens_to_words(tokens: list[Any], offset: float = 0.0) -> list[Word]:
     """Group Parakeet SentencePiece sub-word tokens into words.
 
     A token whose text starts with a space begins a new word. Confidence is the
-    geometric mean over the word's tokens.
+    geometric mean over the word's tokens. Punctuation tokens join the word's text but
+    not its end time: TDT gives a trailing "." the pause after the word (measured: the
+    end of "this." 240 ms past the speech), which would misplace `[n]` markers.
     """
     groups: list[tuple[str, float, float, list[float]]] = []
     for tok in tokens:
@@ -66,8 +89,9 @@ def tokens_to_words(tokens: list[Any], offset: float = 0.0) -> list[Word]:
         if not groups or text.startswith(" "):
             groups.append((text.strip(), start + offset, end + offset, [conf]))
         else:
-            word, s, _e, confs = groups[-1]
-            groups[-1] = (word + text, s, end + offset, [*confs, conf])
+            word, s, e, confs = groups[-1]
+            punct = not any(ch.isalnum() for ch in text)
+            groups[-1] = (word + text, s, e if punct else end + offset, [*confs, conf])
     return [
         Word(word, s, e, float(np.exp(np.mean(np.log(np.array(confs) + 1e-10)))))
         for word, s, e, confs in groups
@@ -85,10 +109,16 @@ class ParakeetSTTService(SegmentedSTTService):
 
     def __init__(self, *, models: VoiceModels, **kwargs: Any) -> None:
         kwargs.setdefault("ttfs_p99_latency", 0.6)
+        kwargs.setdefault("trailing_silence_secs", 0.0)  # see TRAILING_KEEP_SECS
         kwargs.setdefault("settings", STTSettings(model=PARAKEET_REPO, language="en"))
         super().__init__(**kwargs)  # pyright: ignore[reportUnknownMemberType]
         self._models = models
-        self._last_audio_time = 0.0
+        self._samples = 0
+        # Per frame: arrival time minus audio time. Frames can reach this processor late
+        # (a busy loop while a reply starts), never early, so the minimum over the last
+        # few seconds is the audio clock's offset; arrival times alone skewed a later
+        # segment's words by ~250 ms in testing.
+        self._skew: deque[float] = deque(maxlen=SKEW_WINDOW_FRAMES)
         self._segment_starts: deque[float] = deque()
 
     @property
@@ -101,20 +131,29 @@ class ParakeetSTTService(SegmentedSTTService):
     async def process_audio_frame(
         self, frame: InputAudioRawFrame, direction: FrameDirection
     ) -> None:
-        self._last_audio_time = time.monotonic()
+        self._samples += len(frame.audio) // 2
+        self._skew.append(time.monotonic() - self._samples / self.sample_rate)
         await super().process_audio_frame(frame, direction)
+
+    def audio_time(self, sample: int) -> float:
+        """Monotonic time of an input sample index (see `_skew`)."""
+        anchor = (
+            min(self._skew) if self._skew else time.monotonic() - self._samples / self.sample_rate
+        )
+        return anchor + sample / self.sample_rate
 
     async def _handle_user_stopped_speaking(self, frame: VADUserStoppedSpeakingFrame) -> None:
         # Time of the segment's first sample, before the base class drains the buffer.
         buffer: bytearray = self._audio_buffer  # pyright: ignore[reportPrivateUsage]
         if self.is_usable and buffer:
-            buffered_secs = len(buffer) / (self.sample_rate * 2)
-            self._segment_starts.append(self._last_audio_time - buffered_secs)
+            self._segment_starts.append(self.audio_time(self._samples - len(buffer) // 2))
         await super()._handle_user_stopped_speaking(frame)  # pyright: ignore[reportPrivateUsage]
 
     def _transcribe_sync(self, pcm: bytes) -> tuple[Any, float, float]:
         audio: Float32Array = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        audio = resample(audio, self.sample_rate, STT_SAMPLE_RATE)
+        audio = trim_trailing_silence(
+            resample(audio, self.sample_rate, STT_SAMPLE_RATE), STT_SAMPLE_RATE
+        )
         t = time.perf_counter()
         result = self._models.transcribe(audio)
         return result, time.perf_counter() - t, len(audio) / STT_SAMPLE_RATE

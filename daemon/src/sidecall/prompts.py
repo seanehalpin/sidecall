@@ -350,6 +350,25 @@ def render_worker_prompt(
 
 # --- talker ------------------------------------------------------------------------
 
+VOICE_NOTE = (
+    "[Voice] This turn was spoken in a voice call and your reply is read aloud. Answer in "
+    "one or two short sentences, and make the first sentence just a few words so speech "
+    "can start right away. If you need to read code first, you may open with a two to "
+    'four word acknowledgement like "Sure, one sec." before looking; say nothing else '
+    "before your tool calls. The [n] markers sit where the user pointed while speaking."
+)
+CONTINUATION_NOTE = (
+    "[Voice] The user paused mid-sentence and carried on. This is their whole message and "
+    "replaces the previous one, which you may have started answering: answer this instead."
+)
+
+
+def interrupted_note(heard: str) -> str:
+    """System note: the user cut the talker off after hearing `heard`."""
+    if heard.strip():
+        return f'[System] The user interrupted you; they only heard: "{heard.strip()}"'
+    return "[System] The user interrupted you before hearing any of your last reply."
+
 
 def render_talker_turn(
     text: str,
@@ -357,10 +376,19 @@ def render_talker_turn(
     picks: Sequence[PickRef] = (),
     page: PageContext | None = None,
     screenshot_attached: bool | None = None,
+    *,
+    spoken: bool = False,
+    continuation: bool = False,
 ) -> str:
     """One user turn for the talker: unseen system notes, the page, the user's text, picks.
-    `screenshot_attached` defaults to whether the page has a screenshot ref."""
+    `screenshot_attached` defaults to whether the page has a screenshot ref. Spoken
+    turns carry the voice note (and the continuation note when they replace the
+    previous turn)."""
     lines = [*notes]
+    if spoken:
+        lines.append(VOICE_NOTE)
+    if continuation:
+        lines.append(CONTINUATION_NOTE)
     if page is not None:
         lines.append(f"Page: {render_page(page)}")
         if bool(page.screenshot) if screenshot_attached is None else screenshot_attached:

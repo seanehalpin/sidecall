@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
+import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from claude_agent_sdk import (
@@ -150,6 +153,13 @@ def build_mcp_server(session: RepoSession) -> dict[str, Any]:
     return config
 
 
+def _is_text_delta(event: dict[str, Any]) -> bool:
+    if event.get("type") != "content_block_delta":
+        return False
+    delta = cast(dict[str, Any], event.get("delta") or {})
+    return delta.get("type") == "text_delta" and bool(delta.get("text"))
+
+
 class NarrationFilter:
     """Turns raw API stream events into text worth showing (and later speaking).
 
@@ -197,11 +207,71 @@ class NarrationFilter:
         return out
 
 
+class SpokenFilter:
+    """Voice turns: release text as it streams. TTS speaks it a sentence at a time, so
+    holding a whole message (NarrationFilter) would add its generation time to the
+    latency. Text before a read tool isn't dropped: in a voice turn the talker is told it
+    may say a short acknowledgement ("Sure, one sec.") before looking. A text block ends
+    with a newline, which tells TTS to speak what it has (`voice.call.ReplyStream`)."""
+
+    def __init__(self) -> None:
+        self._shown = False
+        self._new_block = False
+        self._in_text = False
+        self._block_text = False
+
+    def feed(self, event: dict[str, Any]) -> str:
+        etype = event.get("type")
+        if etype == "content_block_start":
+            block = cast(dict[str, Any], event.get("content_block") or {})
+            self._in_text = block.get("type") == "text"
+            self._block_text = False
+            if self._in_text:
+                self._new_block = True
+            return ""
+        if etype == "content_block_stop":
+            ended = self._in_text and self._block_text
+            self._in_text = self._block_text = False
+            return "\n" if ended else ""
+        if etype != "content_block_delta":
+            return ""
+        delta = cast(dict[str, Any], event.get("delta") or {})
+        if delta.get("type") != "text_delta":
+            return ""
+        text = str(delta.get("text") or "")
+        if self._new_block or not self._shown:
+            text = text.lstrip()
+            if not text:
+                return ""
+            self._new_block = False
+        self._shown = True
+        self._block_text = True
+        return text
+
+
+@dataclass
+class TurnTiming:
+    """Seconds from sending the query (talker latency, SPEC §6.8)."""
+
+    first_delta: float | None = None
+    """First text token from the API."""
+    first_release: float | None = None
+    """First text handed on (to the rail, or to TTS in a spoken turn)."""
+    narration_release: float | None = None
+    """When NarrationFilter would have released its first text (its cost, for voice)."""
+    result: float | None = None
+    spoken: bool = False
+    cost_usd: float | None = None
+
+
 class ClaudeTalker:
     def __init__(self, session: RepoSession) -> None:
         self.session = session
         self._client: ClaudeSDKClient | None = None
         self._in_turn = False
+        self._abort = False
+        self._connect_lock = asyncio.Lock()
+        self.timings: list[TurnTiming] = []
 
     def options(self) -> ClaudeAgentOptions:
         return ClaudeAgentOptions(
@@ -220,11 +290,16 @@ class ClaudeTalker:
         )
 
     async def _ensure_client(self) -> ClaudeSDKClient:
-        if self._client is None:
-            client = ClaudeSDKClient(options=self.options())
-            await client.connect()
-            self._client = client
-        return self._client
+        async with self._connect_lock:
+            if self._client is None:
+                client = ClaudeSDKClient(options=self.options())
+                await client.connect()
+                self._client = client
+            return self._client
+
+    async def warm(self) -> None:
+        """Connect ahead of the first turn (a voice call starting)."""
+        await self._ensure_client()
 
     async def reply(
         self,
@@ -232,35 +307,57 @@ class ClaudeTalker:
         on_delta: OnDelta,
         image: Image | None = None,
         extra_images: Sequence[LabelledImage] = (),
+        *,
+        spoken: bool = False,
     ) -> str:
-        client = await self._ensure_client()
+        self._in_turn = True
+        self._abort = False
         streamed: list[str] = []
         fallback: list[str] = []
         narration = NarrationFilter()
-        self._in_turn = True
+        voice = SpokenFilter() if spoken else None
+        timing = TurnTiming(spoken=spoken)
+        self.timings.append(timing)
+        t0 = time.perf_counter()
 
         def emit(text: str) -> None:
+            if timing.first_release is None:
+                timing.first_release = time.perf_counter() - t0
             streamed.append(text)
             on_delta(text)
 
         try:
+            client = await self._ensure_client()
+            t0 = time.perf_counter()
             await client.query(sdk_prompt(prompt, image, extra_images))
+            if self._abort:  # interrupted while connecting or sending
+                await client.interrupt()
             async for msg in client.receive_response():
                 if isinstance(msg, StreamEvent):
                     if msg.parent_tool_use_id is not None:
                         continue
-                    text = narration.feed(msg.event)
+                    event = msg.event
+                    if timing.first_delta is None and _is_text_delta(event):
+                        timing.first_delta = time.perf_counter() - t0
+                    held = narration.feed(event)
+                    if held and timing.narration_release is None:
+                        timing.narration_release = time.perf_counter() - t0
+                    text = voice.feed(event) if voice is not None else held
                     if text:
                         emit(text)
                 elif isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:
                     fallback.extend(b.text for b in msg.content if isinstance(b, TextBlock))
                 elif isinstance(msg, ResultMessage):
+                    timing.result = time.perf_counter() - t0
+                    timing.cost_usd = msg.total_cost_usd
                     self.session.sessions.set_talker_session(msg.session_id)
                     log.info(
-                        "talker turn subtype=%s cost=$%s terminal=%s",
+                        "talker turn subtype=%s cost=$%s terminal=%s first_text=%.2fs%s",
                         msg.subtype,
                         msg.total_cost_usd,
                         msg.terminal_reason,
+                        timing.first_release or -1,
+                        " (spoken)" if spoken else "",
                     )
         except Exception:
             await self.close()
@@ -272,7 +369,10 @@ class ClaudeTalker:
         return " ".join(t.strip() for t in fallback if t.strip())
 
     async def interrupt(self) -> None:
-        if self._client is not None and self._in_turn:
+        if not self._in_turn:
+            return
+        self._abort = True
+        if self._client is not None:
             await self._client.interrupt()
 
     async def close(self) -> None:

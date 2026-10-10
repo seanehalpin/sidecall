@@ -1,11 +1,13 @@
 """The Pipecat voice pipeline and its WebRTC backend (SPEC §6.8).
 
 ```
-transport.input() → MuteGate → Parakeet STT → user aggregator (Silero VAD + Smart Turn v3)
-  → TalkerProcessor → Kokoro TTS → transport.output() → assistant aggregator
+transport.input() → MuteGate → Parakeet STT → SegmentTap
+  → user aggregator (Silero VAD + Smart Turn v3) → TalkerProcessor → Kokoro TTS
+  → transport.output() → OutputTap → assistant aggregator
 ```
 
-Phase 2 inserts the TurnAssembler between the user aggregator and the talker.
+Turn assembly (SPEC §6.9) happens in `Call`: `SegmentTap` hands it each STT segment's
+word times, and `TalkerProcessor` reports the aggregator's turn end.
 """
 
 from __future__ import annotations
@@ -13,7 +15,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
@@ -25,10 +29,8 @@ from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
     InterruptionFrame,
-    TranscriptionFrame,
     TTSAudioRawFrame,
     UserStoppedSpeakingFrame,
-    VADUserStartedSpeakingFrame,
     VADUserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
@@ -48,10 +50,10 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
 from . import loopback
-from .call import CallEvents, TalkerFn
+from .call import CallEvents, ReplyStream
 from .models import VoiceModels, get_models
 from .services import KokoroTTSService, ParakeetSTTService
-from .talker import TalkerProcessor
+from .talker import OutputTap, SegmentTap, TalkerProcessor
 
 loopback.apply()
 
@@ -60,6 +62,8 @@ log = logging.getLogger(__name__)
 IN_SAMPLE_RATE = 16000
 OUT_SAMPLE_RATE = 24000
 VAD_STOP_SECS = 0.2
+VAD_START_SECS = float(os.environ.get("SIDECALL_VAD_START_SECS", "0.2"))
+"""Speech needed before VAD (and so barge-in) triggers. Pipecat's default."""
 
 
 class MuteGate(FrameProcessor):
@@ -84,7 +88,8 @@ class MuteGate(FrameProcessor):
 
 
 class CallObserver(BaseObserver):
-    """Turns pipeline frames into `CallEvents` and measures per-turn latency.
+    """Reports bot speaking and measures per-turn latency (observers run on their own
+    tasks, so anything order-sensitive goes through the taps instead).
 
     Latency is end of speech (VAD stop minus `stop_secs`) to the first audio the output
     transport writes after the turn ends.
@@ -127,64 +132,68 @@ class CallObserver(BaseObserver):
         if not isinstance(
             frame,
             (
-                VADUserStartedSpeakingFrame,
                 VADUserStoppedSpeakingFrame,
                 UserStoppedSpeakingFrame,
                 InterruptionFrame,
-                TranscriptionFrame,
                 BotStartedSpeakingFrame,
                 BotStoppedSpeakingFrame,
             ),
         ) or not self._first_sight(frame):
             return
-        if isinstance(frame, VADUserStartedSpeakingFrame):
-            self._events.user_speaking()
-        elif isinstance(frame, VADUserStoppedSpeakingFrame):
+        if isinstance(frame, VADUserStoppedSpeakingFrame):
             self._vad_stop = now
         elif isinstance(frame, UserStoppedSpeakingFrame):
             self._turn_stop = now
             self._waiting = True
         elif isinstance(frame, InterruptionFrame):
             self._waiting = False
-        elif isinstance(frame, TranscriptionFrame):
-            self._events.user_segment(frame.text)
         elif isinstance(frame, BotStartedSpeakingFrame):
             self._events.bot_speaking(True)
         else:
             self._events.bot_speaking(False)
 
 
+@dataclass
+class VoicePipeline:
+    worker: PipelineWorker
+    talker: TalkerProcessor
+
+
 def build_worker(
     transport_input: FrameProcessor,
     transport_output: FrameProcessor,
     models: VoiceModels,
-    talker: TalkerFn,
     events: CallEvents,
     *,
     gate: MuteGate | None = None,
-) -> PipelineWorker:
+) -> VoicePipeline:
     stt = ParakeetSTTService(models=models)
     tts = KokoroTTSService(models=models)
     user_agg, assistant_agg = LLMContextAggregatorPair(
         LLMContext(),
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=VAD_STOP_SECS)),
+            vad_analyzer=SileroVADAnalyzer(
+                params=VADParams(start_secs=VAD_START_SECS, stop_secs=VAD_STOP_SECS)
+            ),
             user_turn_strategies=UserTurnStrategies(
                 stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())]
             ),
         ),
     )
+    talker = TalkerProcessor(events)
     processors: list[FrameProcessor] = [
         transport_input,
         gate or MuteGate(),
         stt,
+        SegmentTap(events),
         user_agg,
-        TalkerProcessor(talker, events),
+        talker,
         tts,
         transport_output,
+        OutputTap(events),
         assistant_agg,
     ]
-    return PipelineWorker(
+    worker = PipelineWorker(
         Pipeline(processors),
         params=PipelineParams(
             audio_in_sample_rate=IN_SAMPLE_RATE,
@@ -194,17 +203,18 @@ def build_worker(
         observers=[CallObserver(events, transport_output)],
         enable_rtvi=False,
     )
+    return VoicePipeline(worker, talker)
 
 
 class PipecatBackend:
     """`CallBackend` over Pipecat's SmallWebRTC transport (non-trickle signalling)."""
 
-    def __init__(self, events: CallEvents, talker: TalkerFn) -> None:
+    def __init__(self, events: CallEvents) -> None:
         self._events = events
-        self._talker = talker
         self._gate = MuteGate()
         self._conn: SmallWebRTCConnection | None = None
         self._worker: PipelineWorker | None = None
+        self._talker: TalkerProcessor | None = None
         self._run: asyncio.Task[None] | None = None
 
     async def start(self, offer_sdp: str) -> str:
@@ -233,9 +243,10 @@ class PipecatBackend:
         async def _disconnected(_t: Any, _c: Any) -> None:  # pyright: ignore[reportUnusedFunction]
             events.closed()
 
-        self._worker = build_worker(
-            transport.input(), transport.output(), models, self._talker, events, gate=self._gate
+        pipeline = build_worker(
+            transport.input(), transport.output(), models, events, gate=self._gate
         )
+        self._worker, self._talker = pipeline.worker, pipeline.talker
         runner = WorkerRunner(handle_sigint=False)
         await runner.add_workers(self._worker)
         self._run = asyncio.create_task(runner.run())
@@ -246,6 +257,12 @@ class PipecatBackend:
 
     def set_muted(self, muted: bool) -> None:
         self._gate.muted = muted
+
+    def speak(self, reply: ReplyStream, *, interrupt: bool = False) -> None:
+        if self._talker is None:
+            asyncio.get_running_loop().create_task(reply.aclose())
+            return
+        self._talker.speak(reply, interrupt=interrupt)
 
     async def stop(self) -> None:
         if self._worker is not None:

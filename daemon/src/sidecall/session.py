@@ -11,16 +11,23 @@ import contextlib
 import logging
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
-from .approvals import ApprovalBroker
+from .announcer import Announcement, Announcer, render_announcement
+from .approvals import ApprovalBroker, NotifyAction
 from .config import RepoDirs
 from .paths import normalise_brief
 from .picks import PickStore, load_snapshot, normalise_pick, save_snapshot
-from .prompts import UNDO_BRIEF, PickRef, render_talker_turn, task_note
+from .prompts import (
+    UNDO_BRIEF,
+    PickRef,
+    interrupted_note,
+    render_talker_turn,
+    task_note,
+)
 from .protocol.messages import (
     AgentTextDelta,
     AgentTextDeltaPayload,
@@ -57,6 +64,10 @@ from .protocol.models import (
 from .queue import TaskQueue
 from .state import SessionStore, TranscriptStore
 from .uploads import Image, LabelledImage, UploadStore
+from .voice.turns import PickTime
+
+if TYPE_CHECKING:
+    from .voice.call import Call
 
 log = logging.getLogger(__name__)
 
@@ -72,12 +83,19 @@ class Talker(Protocol):
         on_delta: OnDelta,
         image: Image | None = None,
         extra_images: Sequence[LabelledImage] = (),
+        *,
+        spoken: bool = False,
     ) -> str:
         """Run one turn (with an optional page screenshot, then labelled pick crops),
-        streaming text through `on_delta`; return the full text."""
+        streaming text through `on_delta`; return the full text. `spoken` turns stream
+        text as it arrives (it is read aloud) instead of a message at a time."""
         ...
 
     async def interrupt(self) -> None: ...
+
+    async def warm(self) -> None:
+        """Get ready for a turn (connect), so the first spoken reply isn't slower."""
+        ...
 
     async def close(self) -> None: ...
 
@@ -142,8 +160,14 @@ class RepoSession:
         self.uploads = UploadStore(home)
         self.picks = PickStore()
         self.approvals = ApprovalBroker(
-            emit, on_blocked=self._on_blocked, on_unblocked=self._on_unblocked
+            emit,
+            on_blocked=self._on_blocked,
+            on_unblocked=self._on_unblocked,
+            notify_action=self._notify_action,
         )
+        self.announcer = Announcer()
+        self._call: Call | None = None
+        self._last_page: PageContext | None = None
 
         self._talker: Talker | None = None
         self._worker: Worker | None = None
@@ -209,9 +233,19 @@ class RepoSession:
     def new_turn_id(self) -> str:
         return _new_id()
 
-    def add_transcript(self, role: Role, text: str, *, turn_id: str | None = None) -> str:
-        """Append a transcript entry (voice turns, SPEC §6.8) and broadcast it."""
-        return self._add_transcript(role, text, turn_id=turn_id).turn_id
+    def add_transcript(
+        self,
+        role: Role,
+        text: str,
+        *,
+        turn_id: str | None = None,
+        pick_ids: list[int] | None = None,
+        replace: bool = False,
+    ) -> str:
+        """Append (or update) a transcript entry (voice turns, SPEC §6.8) and broadcast it."""
+        return self._add_transcript(
+            role, text, turn_id=turn_id, pick_ids=pick_ids, replace=replace
+        ).turn_id
 
     def _add_transcript(
         self,
@@ -221,6 +255,7 @@ class RepoSession:
         turn_id: str | None = None,
         pick_ids: list[int] | None = None,
         task_id: str | None = None,
+        replace: bool = False,
     ) -> TranscriptEntry:
         entry = TranscriptEntry(
             turn_id=turn_id or _new_id(),
@@ -230,7 +265,10 @@ class RepoSession:
             ts=_now_ms(),
             task_id=task_id,
         )
-        self.transcript.append(entry)
+        if replace:
+            self.transcript.replace(entry)
+        else:
+            self.transcript.append(entry)
         self._emit(
             TranscriptFinal(
                 payload=TranscriptFinalPayload(
@@ -250,7 +288,12 @@ class RepoSession:
         """Normalise (SPEC §5.4) and store a pick sent by the extension."""
         normalised = normalise_pick(pick, self.repo_path)
         self.picks.add(normalised)
+        if self._call is not None:
+            self._call.pick_added(PickTime(normalised.id, normalised.created_at))
         return normalised
+
+    def pick_times(self) -> list[PickTime]:
+        return [PickTime(p.id, p.created_at) for p in self.picks.all()]
 
     def remove_pick(self, pick_id: int) -> bool:
         return self.picks.remove(pick_id)
@@ -317,10 +360,20 @@ class RepoSession:
         async with self._talker_lock:
             await self._run_talker_turn(text, page, refs)
 
+    def _take_notes(self) -> list[str]:
+        """Unseen system notes for the next talker turn; the announcer drops what they
+        cover, so it isn't spoken again."""
+        notes, self._unseen = self._unseen, []
+        if notes:
+            self.announcer.mark_seen()
+        return notes
+
     async def _run_talker_turn(
         self, text: str, page: PageContext | None = None, refs: Sequence[PickRef] = ()
     ) -> None:
-        notes, self._unseen = self._unseen, []
+        if page is not None:
+            self._last_page = page
+        notes = self._take_notes()
         image: Image | None = None
         if page is not None and page.screenshot:
             image = await asyncio.to_thread(self.uploads.load, page.screenshot)
@@ -340,14 +393,163 @@ class RepoSession:
             parts.append(delta)
             self._emit(AgentTextDelta(payload=AgentTextDeltaPayload(turn_id=turn_id, delta=delta)))
 
+        full = await self._invoke_talker(prompt, on_delta, image, crops, notes, page, picks, False)
+        self._emit(AgentTextDone(payload=AgentTextDonePayload(turn_id=turn_id)))
+        if full is None:
+            return
+        reply = (full or "".join(parts)).strip()
+        if reply:
+            self._add_transcript("agent", reply, turn_id=turn_id)
+
+    # --- voice (SPEC §6.7-6.9) ---
+
+    @property
+    def talker_busy(self) -> bool:
+        return self._talker_busy or self._talker_lock.locked()
+
+    @property
+    def call_active(self) -> bool:
+        return self._call is not None
+
+    def attach_call(self, call: Call) -> None:
+        self._call = call
+
+    def warm_talker(self) -> None:
+        """A call connected: connect the talker now rather than on the first turn."""
+
+        async def warm() -> None:
+            if self._talker is None:
+                self._talker = self._talker_factory(self)
+            try:
+                await self._talker.warm()
+            except Exception:
+                log.warning("talker warm-up failed", exc_info=True)
+
+        task = asyncio.create_task(warm())
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
+
+    def detach_call(self, call: Call) -> None:
+        if self._call is call:
+            self._call = None
+
+    def _notify_action(self) -> NotifyAction:
+        return "open" if self._call is not None else "call"
+
+    def has_announcements(self) -> bool:
+        return bool(self.announcer)
+
+    def voice_interrupted(self, heard: str) -> None:
+        self._unseen.append(interrupted_note(heard))
+
+    def _voice_page(self, picks: Sequence[Pick]) -> PageContext | None:
+        """Voice turns carry no screenshot: use the page of the first pick, else the
+        page of the last typed turn (without its old screenshot)."""
+        for pick in picks:
+            p = pick.page
+            return PageContext(url=p.url, route=p.route, title=p.title, viewport=p.viewport)
+        if self._last_page is not None:
+            return self._last_page.model_copy(update={"screenshot": None})
+        return None
+
+    def voice_reply(
+        self, text: str, pick_ids: list[int], *, continuation: bool
+    ) -> AsyncGenerator[str, None]:
+        """The talker's reply to a spoken turn, streamed for TTS. Same client, notes,
+        picks and crops as a typed turn; the transcript is the call's job."""
+        refs = self.picks.resolve(pick_ids)
+        picks = [r for r in refs if isinstance(r, Pick)]
+        page = self._voice_page(picks)
+
+        def build(notes: list[str]) -> str:
+            return render_talker_turn(
+                text,
+                notes,
+                picks=refs,
+                page=page,
+                screenshot_attached=False,
+                spoken=True,
+                continuation=continuation,
+            )
+
+        return self._voice_stream(build, picks, page)
+
+    def voice_announcement(self, *, opening: bool) -> AsyncGenerator[str, None] | None:
+        """One spoken update for every pending announcement (SPEC §6.7), or None."""
+        if not self.announcer:
+            return None
+        events = self.announcer.take()
+
+        def build(notes: list[str]) -> str:
+            return render_announcement(events, notes, opening=opening)
+
+        return self._voice_stream(build, [], None)
+
+    async def _voice_stream(
+        self,
+        build: Callable[[list[str]], str],
+        picks: Sequence[Pick],
+        page: PageContext | None,
+    ) -> AsyncGenerator[str, None]:
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        talking = asyncio.Event()
+
+        async def run() -> None:
+            try:
+                async with self._talker_lock:
+                    notes = self._take_notes()
+                    crops = await asyncio.to_thread(self._crops, picks, MAX_TURN_IMAGES)
+                    talking.set()
+                    await self._invoke_talker(
+                        build(notes), queue.put_nowait, None, crops, notes, page, picks, True
+                    )
+            finally:
+                queue.put_nowait(None)
+
+        task = asyncio.create_task(run(), name="voice-turn")
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
+        finished = False
+        try:
+            while (item := await queue.get()) is not None:
+                yield item
+            finished = True
+        finally:
+            if not finished and not task.done():
+                # Closed early (the user interrupted): stop the talker's turn. It ends
+                # with an aborted result about 10 ms later and releases the lock.
+                if talking.is_set():
+                    stop = asyncio.create_task(self._interrupt_talker())
+                    self._bg.add(stop)
+                    stop.add_done_callback(self._bg.discard)
+                else:
+                    task.cancel()
+
+    async def _interrupt_talker(self) -> None:
+        if self._talker is not None:
+            with contextlib.suppress(Exception):
+                await self._talker.interrupt()
+
+    async def _invoke_talker(
+        self,
+        prompt: str,
+        on_delta: OnDelta,
+        image: Image | None,
+        crops: Sequence[LabelledImage],
+        notes: list[str],
+        page: PageContext | None,
+        picks: Sequence[Pick],
+        spoken: bool,
+    ) -> str | None:
+        """Run one talker turn with the turn's page and picks in scope for dispatch.
+        On error: restore the notes, drop the client, record a system entry; None."""
         self._talker_busy = True
         self._turn_page = page
-        self._turn_picks = picks
-        full = ""
+        self._turn_picks = list(picks)
         try:
             if self._talker is None:
                 self._talker = self._talker_factory(self)
-            full = await self._talker.reply(prompt, on_delta, image, crops)
+            return await self._talker.reply(prompt, on_delta, image, crops, spoken=spoken)
         except Exception as exc:
             log.exception("talker turn failed")
             self._unseen = notes + self._unseen
@@ -355,17 +557,12 @@ class RepoSession:
             if talker is not None:
                 with contextlib.suppress(Exception):
                     await talker.close()
-            self._emit(AgentTextDone(payload=AgentTextDonePayload(turn_id=turn_id)))
             self._add_transcript("system", f"The talker hit an error: {exc}")
-            return
+            return None
         finally:
             self._talker_busy = False
             self._turn_page = None
             self._turn_picks = []
-        reply = (full or "".join(parts)).strip()
-        self._emit(AgentTextDone(payload=AgentTextDonePayload(turn_id=turn_id)))
-        if reply:
-            self._add_transcript("agent", reply, turn_id=turn_id)
 
     # --- talker tools ---
 
@@ -438,10 +635,15 @@ class RepoSession:
     # --- approvals -> task status ---
 
     def _on_blocked(self, task_id: str) -> None:
-        if self.queue.mark_blocked(task_id) is not None:
+        task = self.queue.mark_blocked(task_id)
+        if task is not None:
             self._emit_queue()
+            pending = [a for a in self.approvals.pending() if a.task_id == task_id]
+            detail = pending[-1].reason if pending else ""
+            self.announcer.add(Announcement("blocked", task_id, task.title, detail, _now_ms()))
 
     def _on_unblocked(self, task_id: str) -> None:
+        self.announcer.resolve_blocked(task_id)
         if self.queue.mark_running(task_id) is not None:
             self._emit_queue()
 
@@ -503,13 +705,8 @@ class RepoSession:
             self._emit_queue()
             text = f"Task completed: {task.title}. {result.summary}".strip()
             self._add_transcript("system", text, task_id=task.id)
-            self._emit(
-                Notify(
-                    payload=NotifyPayload(
-                        title=f"{task.title} done", body=result.summary or "Done", action="open"
-                    )
-                )
-            )
+            self._announce("completed", done, result.summary)
+            self._notify(f"{task.title} done", result.summary or "Done")
         elif result.status == "failed":
             reason = result.error or "unknown error"
             done = self.queue.mark_failed(task.id, reason)
@@ -518,15 +715,22 @@ class RepoSession:
             self._emit(TaskFailed(payload=TaskFailedPayload(task_id=task.id, reason=reason)))
             self._emit_queue()
             self._add_transcript("system", f"Task failed: {task.title}. {reason}", task_id=task.id)
-            self._emit(
-                Notify(
-                    payload=NotifyPayload(title=f"{task.title} failed", body=reason, action="open")
-                )
-            )
+            self._announce("failed", done, reason)
+            self._notify(f"{task.title} failed", reason)
         else:
             done = self.queue.mark_cancelled(task.id)
             if done is None:
                 return
             self._emit_queue()
             self._add_transcript("system", f"Task cancelled: {task.title}", task_id=task.id)
+            self.announcer.resolve_blocked(task.id)
         self._unseen.append(task_note(done))
+
+    def _announce(self, kind: Literal["completed", "failed"], task: Task, detail: str) -> None:
+        self.announcer.add(Announcement(kind, task.id, task.title, detail, _now_ms()))
+
+    def _notify(self, title: str, body: str) -> None:
+        """Without a call, a notification whose click starts one (SPEC §6.7). During a
+        call the talker speaks the update instead."""
+        if self._call is None:
+            self._emit(Notify(payload=NotifyPayload(title=title, body=body, action="call")))

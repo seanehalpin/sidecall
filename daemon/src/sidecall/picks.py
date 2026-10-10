@@ -171,6 +171,9 @@ class PickStore:
     def get(self, pick_id: int) -> Pick | None:
         return self._picks.get(pick_id)
 
+    def all(self) -> list[Pick]:
+        return list(self._picks.values())
+
     def resolve(self, ids: Iterable[int]) -> list[Pick | int]:
         """Each id as its pick, or the bare id when unknown. Order and repeats are
         collapsed to first occurrence."""

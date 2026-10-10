@@ -6,6 +6,7 @@ import asyncio
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from .protocol.messages import (
     ApprovalResolved,
@@ -19,6 +20,7 @@ from .protocol.messages import (
 from .protocol.models import Approval
 
 Emit = Callable[[ServerMessage], None]
+NotifyAction = Literal["open", "call"]
 
 
 @dataclass
@@ -31,7 +33,8 @@ class ApprovalBroker:
     """One per repo. `request` blocks (no timeout) until `respond` or `cancel_task`.
 
     `on_blocked(task_id)` / `on_unblocked(task_id)` let the owner update task status;
-    they run before the corresponding messages are emitted.
+    they run before the corresponding messages are emitted. `notify_action` picks the
+    notification's click action ("call" when no voice call is active, SPEC §6.7).
     """
 
     def __init__(
@@ -39,8 +42,10 @@ class ApprovalBroker:
         emit: Emit,
         on_blocked: Callable[[str], None] | None = None,
         on_unblocked: Callable[[str], None] | None = None,
+        notify_action: Callable[[], NotifyAction] = lambda: "open",
     ) -> None:
         self._emit = emit
+        self._notify_action = notify_action
         self._on_blocked = on_blocked
         self._on_unblocked = on_unblocked
         self._pending: dict[str, _Pending] = {}
@@ -62,7 +67,9 @@ class ApprovalBroker:
         self._emit(TaskBlocked(payload=TaskBlockedPayload(task_id=task_id, approval=approval)))
         self._emit(
             Notify(
-                payload=NotifyPayload(title="Sidecall needs your OK", body=reason, action="open")
+                payload=NotifyPayload(
+                    title="Sidecall needs your OK", body=reason, action=self._notify_action()
+                )
             )
         )
         try:
