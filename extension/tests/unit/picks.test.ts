@@ -6,7 +6,7 @@ import { createCaptureGate } from '../../src/lib/picks/gate';
 import { clipRect, planCrop, planViewport } from '../../src/lib/picks/geometry';
 import { insertAtRange } from '../../src/lib/picks/insert';
 import { parseMarkers, segmentMarkers } from '../../src/lib/picks/markers';
-import { daemonTime, nextPickId, selectPickIds } from '../../src/lib/picks/turn';
+import { daemonTime, nextPickId, picksToDimForTurn, selectPickIds } from '../../src/lib/picks/turn';
 
 const draft = (patch: Partial<PickDraft> = {}): PickDraft => ({
   kind: 'element',
@@ -181,5 +181,23 @@ describe('capture gate', () => {
     const gate = createCaptureGate(0);
     await expect(gate.run(() => Promise.reject(new Error('x')))).rejects.toThrow('x');
     expect(await gate.run(async () => 7)).toBe(7);
+  });
+});
+
+describe('picksToDimForTurn', () => {
+  const live = [
+    { id: 1, dimmed: true },
+    { id: 2, dimmed: false },
+    { id: 3, dimmed: false },
+  ];
+  it('dims the live, undimmed picks a voice turn used', () => {
+    expect(picksToDimForTurn(live, { role: 'user', pickIds: [3, 2, 9] })).toEqual([2, 3]);
+  });
+  it('skips picks a typed turn already dimmed', () => {
+    expect(picksToDimForTurn(live, { role: 'user', pickIds: [1] })).toEqual([]);
+  });
+  it('ignores agent turns and turns without picks', () => {
+    expect(picksToDimForTurn(live, { role: 'agent', pickIds: [2] })).toEqual([]);
+    expect(picksToDimForTurn(live, { role: 'user', pickIds: [] })).toEqual([]);
   });
 });

@@ -394,6 +394,18 @@ describe('extension smoke', () => {
       expect((await logOf('pins-clear')).length).toBeGreaterThan(0);
     });
 
+    it('a voice transcript.final with pickIds dims those picks', async () => {
+      await fromPage(await pickMsg('l3'));
+      const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 5);
+      expect(add.payload.createdAt).toBeGreaterThan(Date.now() + 30_000); // daemon clock
+      await expect.poll(() => panel.locator('[data-pick-id="5"]').getAttribute('data-status')).toBe('ready');
+      daemon.broadcast(serverMsg('transcript.final', { turnId: 'v1', role: 'user', text: 'make this blue', pickIds: [5], taskId: null }));
+      await expect.poll(async () => (await logOf('pin-dim')).at(-1)?.msg.ids).toEqual([5]);
+      await panel.locator('[data-pick-id="5"][data-dimmed="true"]').waitFor();
+      await panel.getByRole('button', { name: 'Clear all' }).click();
+      await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
+    });
+
     it('ignores picks from a tab that is not on the bound origin', async () => {
       const other = await ctx.newPage();
       await other.goto('data:text/html,<title>x</title>');
@@ -511,6 +523,23 @@ describe('extension smoke', () => {
     await sleep(300);
     daemon.broadcast(serverMsg('notify', { title: 'Red heading done', body: 'Tap to talk', action: 'open' }));
     await expect.poll(getAll).toBe(1);
+  });
+
+  it('clicking a notify {action:"call"} notification starts a call', async () => {
+    const ids = await sw.evaluate(() => chrome.notifications.getAll().then((n) => Object.keys(n)));
+    for (const id of ids) await sw.evaluate((i) => chrome.notifications.clear(i), id);
+    daemon.broadcast(serverMsg('notify', { title: 'Done', body: 'Tap to talk', action: 'call' }));
+    let id: string | undefined;
+    await expect.poll(async () => (id = (await sw.evaluate(() => chrome.notifications.getAll().then((n) => Object.keys(n))))[0])).toBeTruthy();
+    expect(id).toMatch(/:call$/);
+    const starts = daemon.of('call.start').length;
+    // A real click can't be automated: call the registered handler directly.
+    await sw.evaluate((i) => (globalThis as unknown as { __sidecall: { onNotificationClicked: (id: string) => void } }).__sidecall.onNotificationClicked(i), id!);
+    await expect.poll(() => daemon.of('call.start').length).toBe(starts + 1);
+    daemon.broadcast(serverMsg('call.state', { state: 'idle' }));
+    await expect
+      .poll(() => sw.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT' as never] }).then((c) => c.length)))
+      .toBe(0);
   });
 
   it('a reopened panel renders the current state, and forget pairing unpairs', async () => {

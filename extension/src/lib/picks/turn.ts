@@ -26,3 +26,18 @@ export function nextPickId(counter: number, liveIds: readonly number[]): number 
 export function daemonTime(now: number, clockOffset: number | null): number {
   return Math.round(now + (clockOffset ?? 0));
 }
+
+/**
+ * Picks to dim after a user transcript.final (SPEC §6.9). Voice turns are bound
+ * to picks by the daemon, so the worker only learns which picks a spoken turn
+ * used from the final transcript. Typed turns already dimmed theirs on send, so
+ * only live picks that are still undimmed are returned; agent turns dim nothing.
+ */
+export function picksToDimForTurn(
+  live: readonly { id: number; dimmed: boolean }[],
+  turn: { role: string; pickIds: readonly number[] },
+): number[] {
+  if (turn.role !== 'user' || !turn.pickIds.length) return [];
+  const wanted = new Set(turn.pickIds);
+  return live.filter((p) => !p.dimmed && wanted.has(p.id)).map((p) => p.id).sort((a, b) => a - b);
+}

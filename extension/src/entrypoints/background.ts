@@ -49,7 +49,7 @@ import { AckWaiter } from '@/lib/picks/ack';
 import { buildChip, buildPin } from '@/lib/picks/chip';
 import { createCaptureGate } from '@/lib/picks/gate';
 import { derivePickImages } from '@/lib/picks/images';
-import { daemonTime, nextPickId, selectPickIds } from '@/lib/picks/turn';
+import { daemonTime, nextPickId, picksToDimForTurn, selectPickIds } from '@/lib/picks/turn';
 import { allowedOrigin } from '@/lib/origin';
 import {
   SCREENSHOT_QUALITY,
@@ -265,6 +265,10 @@ export default defineBackground(() => {
         break;
       case 'task.created':
         consumePicks(msg.payload.pickIds);
+        break;
+      case 'transcript.final':
+        // A spoken turn: the daemon bound it to picks by time; dim them like a typed turn.
+        dimPicks(picksToDimForTurn(state.picks, msg.payload));
         break;
       case 'webrtc.answer':
         if (state.inCall) toOffscreen({ op: 'answer', sdp: msg.payload.sdp });
@@ -729,7 +733,7 @@ export default defineBackground(() => {
     if (railOpen()) return;
     // The window id rides in the notification id, so the click handler can call
     // sidePanel.open synchronously, inside the user gesture, even after a restart.
-    const id = `${NOTIFICATION_PREFIX}:${lastWindowId ?? -1}:${Date.now()}`;
+    const id = `${NOTIFICATION_PREFIX}:${lastWindowId ?? -1}:${Date.now()}:${p.action === 'call' ? 'call' : 'open'}`;
     void browser.notifications
       .create(id, {
         type: 'basic',
@@ -748,9 +752,11 @@ export default defineBackground(() => {
       .catch(() => {});
   }
 
-  browser.notifications.onClicked.addListener((notificationId) => {
-    const [prefix, win] = notificationId.split(':');
+  function onNotificationClicked(notificationId: string): void {
+    const [prefix, win, , action] = notificationId.split(':');
     if (prefix !== NOTIFICATION_PREFIX) return;
+    // action "call": also start a call (mic check included); the daemon opens it with a summary.
+    if (action === 'call') void ready.then(() => (state.inCall ? undefined : startCall()));
     const windowId = Number(win);
     void browser.notifications.clear(notificationId);
     if (Number.isInteger(windowId) && windowId >= 0) {
@@ -765,7 +771,10 @@ export default defineBackground(() => {
     } else {
       focusWindow(null);
     }
-  });
+  }
+
+  browser.notifications.onClicked.addListener(onNotificationClicked);
+  (globalThis as { __sidecall?: Record<string, unknown> }).__sidecall!.onNotificationClicked = onNotificationClicked;
 
   // --- Pages (rail, options) -------------------------------------------------
 
