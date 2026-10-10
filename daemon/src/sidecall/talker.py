@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -83,7 +84,13 @@ def build_tools(session: RepoSession) -> list[SdkMcpTool[Any]]:
             brief = Brief.model_validate(args.get("brief"))
         except ValidationError as exc:
             return _text(f"Invalid brief: {exc}", error=True)
+        before = len(session.queue.active)
         task = session.dispatch(brief)
+        if len(session.queue.active) == before:
+            return _text(
+                f"Already queued as task {task.id} ('{task.title}') this turn. "
+                "Don't dispatch it again."
+            )
         ahead = len(session.queue.active) - 1
         where = "It's next." if ahead <= 0 else f"{ahead} task(s) ahead of it."
         return _text(f"Queued task {task.id} ('{task.title}'). {where}")
@@ -208,45 +215,65 @@ class NarrationFilter:
 
 
 class SpokenFilter:
-    """Voice turns: release text as it streams. TTS speaks it a sentence at a time, so
-    holding a whole message (NarrationFilter) would add its generation time to the
-    latency. Text before a read tool isn't dropped: in a voice turn the talker is told it
-    may say a short acknowledgement ("Sure, one sec.") before looking. A text block ends
-    with a newline, which tells TTS to speak what it has (`voice.call.ReplyStream`)."""
+    """Voice turns: speak the opening sentence at once, but never the narration.
+
+    Text is held as it streams. The turn's first complete sentence is released as soon as
+    it ends (so TTS can start within a few tokens), unless a file read follows it first.
+    Anything after that is held until we see what follows: a Read/Grep/Glob call drops it
+    as narration ("Now let me find the dropdown:"), while the end of the turn or one of
+    Sidecall's own tools (dispatch_task after "On it.") releases it. Released text ends
+    with a newline, which tells TTS to speak what it has (`voice.call.ReplyStream`).
+    """
+
+    _SENTENCE_END = re.compile(r"[.!?…](?=\s)")
 
     def __init__(self) -> None:
+        self._buffer = ""
+        self._opening = True
         self._shown = False
-        self._new_block = False
-        self._in_text = False
-        self._block_text = False
 
     def feed(self, event: dict[str, Any]) -> str:
         etype = event.get("type")
         if etype == "content_block_start":
             block = cast(dict[str, Any], event.get("content_block") or {})
-            self._in_text = block.get("type") == "text"
-            self._block_text = False
-            if self._in_text:
-                self._new_block = True
+            if block.get("type") == "tool_use":
+                self._opening = False
+                if block.get("name") in READ_TOOLS:
+                    self._buffer = ""
+                    return ""
+                return self._release(self._buffer)
             return ""
-        if etype == "content_block_stop":
-            ended = self._in_text and self._block_text
-            self._in_text = self._block_text = False
-            return "\n" if ended else ""
-        if etype != "content_block_delta":
-            return ""
-        delta = cast(dict[str, Any], event.get("delta") or {})
-        if delta.get("type") != "text_delta":
-            return ""
-        text = str(delta.get("text") or "")
-        if self._new_block or not self._shown:
-            text = text.lstrip()
-            if not text:
+        if etype == "content_block_delta":
+            delta = cast(dict[str, Any], event.get("delta") or {})
+            if delta.get("type") != "text_delta":
                 return ""
-            self._new_block = False
+            self._buffer += str(delta.get("text") or "")
+            if self._opening:
+                m = self._SENTENCE_END.search(self._buffer)
+                if m:
+                    head, self._buffer = self._buffer[: m.end()], self._buffer[m.end() :]
+                    self._opening = False
+                    return self._release(head, keep_rest=True)
+            return ""
+        if etype == "message_delta":
+            delta = cast(dict[str, Any], event.get("delta") or {})
+            reason = delta.get("stop_reason")
+            if reason and reason != "tool_use":
+                return self._release(self._buffer)
+            return ""
+        if etype == "message_stop":
+            return self._release(self._buffer)
+        return ""
+
+    def _release(self, text: str, keep_rest: bool = False) -> str:
+        if not keep_rest:
+            self._buffer = ""
+        text = text.strip()
+        if not text:
+            return ""
+        out = f" {text}\n" if self._shown else f"{text}\n"
         self._shown = True
-        self._block_text = True
-        return text
+        return out
 
 
 @dataclass

@@ -179,6 +179,9 @@ class RepoSession:
         self._turn_page: PageContext | None = None
         # The picks of that turn, as the talker saw them (immune to later pick.remove).
         self._turn_picks: list[Pick] = []
+        # Tasks dispatched during that turn, by normalised title: a model that calls
+        # dispatch_task twice for one request (seen with haiku) gets the first task back.
+        self._turn_dispatched: dict[str, Task] = {}
         self._unseen: list[str] = []
         self._cancel_requested: set[str] = set()
         self._wake = asyncio.Event()
@@ -569,6 +572,7 @@ class RepoSession:
         self._talker_busy = True
         self._turn_page = page
         self._turn_picks = list(picks)
+        self._turn_dispatched = {}
         try:
             if self._talker is None:
                 self._talker = self._talker_factory(self)
@@ -586,12 +590,20 @@ class RepoSession:
             self._talker_busy = False
             self._turn_page = None
             self._turn_picks = []
+            self._turn_dispatched = {}
 
     # --- talker tools ---
 
     def dispatch(self, brief: Brief) -> Task:
-        """Queue a task from the talker; it carries the page of the current turn."""
-        return self._enqueue(brief, self._turn_page, self._dispatch_picks(brief))
+        """Queue a task from the talker; it carries the page of the current turn. A
+        second dispatch with the same title in one turn returns the first task."""
+        key = " ".join(brief.title.lower().split())
+        if key in self._turn_dispatched:
+            return self._turn_dispatched[key]
+        task = self._enqueue(brief, self._turn_page, self._dispatch_picks(brief))
+        if self._talker_busy:
+            self._turn_dispatched[key] = task
+        return task
 
     def _dispatch_picks(self, brief: Brief) -> list[Pick]:
         """The brief's target picks plus the current turn's, existing ones only. A pick

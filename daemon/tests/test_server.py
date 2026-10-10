@@ -679,7 +679,7 @@ def test_turn_with_page_reaches_talker_and_task(
         send(ws, "user.text", {"text": "chat", "pickIds": [], "page": gone})
         until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
         assert talker.images[-1] is None
-        assert "screenshot" not in talker.prompts[-1]
+        assert "is attached" not in talker.prompts[-1]
 
         # No page at all: text only; tasks it dispatches have no page.
         send(ws, "user.text", {"text": "plain", "pickIds": []})
@@ -767,6 +767,7 @@ def test_user_text_with_picks_reaches_the_talker(
         until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
         talker = FakeTalker.instances[-1]
         lines = talker.prompts[-1].splitlines()
+        lines = [x for x in lines if not x.startswith("[No screenshot")]
         assert lines[0] == "User: chat"
         assert lines[1] == "Picks:"
         assert lines[2].startswith("[1] div.card-header — CardHeader — src/lib/Card.svelte:")
@@ -870,3 +871,17 @@ async def test_get_pick_tool(daemon: Daemon, repo: Path) -> None:
     assert missing["is_error"] and "No pick" in missing["content"][0]["text"]
     bad = await tools["get_pick"].handler({"id": "x"})
     assert bad["is_error"]
+
+
+async def test_duplicate_dispatch_in_one_turn_returns_the_first_task(
+    daemon: Daemon, repo: Path
+) -> None:
+    seed_repo(repo)
+    session = daemon.get_session(repo)
+    session._talker_busy = True  # pyright: ignore[reportPrivateUsage]
+    first = session.dispatch(make_brief("Make sidebar wider"))
+    again = session.dispatch(make_brief("make  sidebar WIDER"))
+    assert again.id == first.id
+    assert len(session.queue.active) == 1
+    other = session.dispatch(make_brief("Add a shadow"))
+    assert other.id != first.id

@@ -8,6 +8,7 @@ from helpers import make_pick, make_task
 
 from sidecall.paths import normalise_brief, rel_path
 from sidecall.prompts import (
+    NO_SCREENSHOT_NOTE,
     TALKER_SYSTEM_PROMPT,
     brief_tool_schema,
     pick_payload_json,
@@ -18,7 +19,7 @@ from sidecall.prompts import (
     task_note,
 )
 from sidecall.protocol.models import Brief, PageContext, Target, Viewport
-from sidecall.talker import NarrationFilter, task_summary
+from sidecall.talker import NarrationFilter, SpokenFilter, task_summary
 from sidecall.worker import (
     approval_command,
     describe_tool_use,
@@ -72,9 +73,9 @@ def test_render_target_file_without_line() -> None:
 
 
 def test_render_talker_turn() -> None:
-    assert render_talker_turn("hi") == "User: hi"
+    assert render_talker_turn("hi") == f"{NO_SCREENSHOT_NOTE}\nUser: hi"
     turn = render_talker_turn("and now?", ["[System] Task 'A' completed: did it"])
-    assert turn == "[System] Task 'A' completed: did it\nUser: and now?"
+    assert turn == f"[System] Task 'A' completed: did it\n{NO_SCREENSHOT_NOTE}\nUser: and now?"
 
 
 def test_task_notes() -> None:
@@ -246,9 +247,10 @@ def test_render_talker_turn_with_page() -> None:
         "User: dropdown should be magenta",
     ]
     no_shot = render_talker_turn("hi", page=_page(None))
-    assert "screenshot" not in no_shot and no_shot.endswith("User: hi")
+    assert "is attached" not in no_shot and NO_SCREENSHOT_NOTE in no_shot
+    assert no_shot.endswith("User: hi")
     missing = render_talker_turn("hi", page=_page(), screenshot_attached=False)
-    assert "screenshot" not in missing
+    assert "is attached" not in missing and NO_SCREENSHOT_NOTE in missing
 
 
 def test_render_worker_prompt_page_section() -> None:
@@ -327,7 +329,7 @@ def test_pick_summary_region() -> None:
 def test_talker_turn_picks_section_and_unknown_ids() -> None:
     known = make_pick(1)
     prompt = render_talker_turn("make [1] like [7]", picks=[known, 7])
-    lines = prompt.splitlines()
+    lines = [line for line in prompt.splitlines() if line != NO_SCREENSHOT_NOTE]
     assert lines[0] == "User: make [1] like [7]"
     assert lines[1] == "Picks:"
     assert lines[2] == render_pick_summary(known)
@@ -384,3 +386,52 @@ def test_pick_payload_json_is_the_full_wire_payload() -> None:
     assert data["screenshots"] == {"crop": "a" * 32, "viewport": "b" * 32}
     assert data["framework"]["props"] == {"title": "Hello"}
     assert data["page"]["route"] == "/cards"
+
+
+def _spoken(events: list[dict[str, Any]]) -> str:
+    f = SpokenFilter()
+    return "".join(f.feed(e) for e in events)
+
+
+def test_spoken_opening_sentence_streams_before_the_turn_ends() -> None:
+    f = SpokenFilter()
+    assert f.feed(_text("On it")) == ""
+    assert f.feed(_text(", adding magenta. ")) == "On it, adding magenta.\n"
+
+
+def test_spoken_narration_before_reads_is_dropped() -> None:
+    events = [
+        _text("Sure, one sec. Now let me find where the dropdown is rendered:"),
+        _tool("Read"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("Let me continue reading to find the swatches:"),
+        _tool("Grep"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("It's GROUP_COLORS in GroupV3. Want magenta after red?"),
+        _stop("end_turn"),
+        {"type": "message_stop"},
+    ]
+    out = _spoken(events)
+    assert "let me" not in out.lower()
+    assert out.startswith("Sure, one sec.\n")
+    assert "GROUP_COLORS" in out and "after red?" in out
+
+
+def test_spoken_narration_as_first_sentence_is_dropped() -> None:
+    events = [_text("Now let me find the color picker:"), _tool("Read"), _stop("tool_use")]
+    assert _spoken(events) == ""
+
+
+def test_spoken_confirmation_before_dispatch_is_kept() -> None:
+    events = [
+        _text("On it"),
+        _tool("mcp__sidecall__dispatch_task"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("Queued."),
+        _stop("end_turn"),
+        {"type": "message_stop"},
+    ]
+    assert _spoken(events) == "On it\n Queued.\n"
