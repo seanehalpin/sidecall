@@ -168,6 +168,8 @@ class RepoSession:
         self.announcer = Announcer()
         self._call: Call | None = None
         self._last_page: PageContext | None = None
+        # The latest page the extension reported during the current call.
+        self._call_page: PageContext | None = None
 
         self._talker: Talker | None = None
         self._worker: Worker | None = None
@@ -432,6 +434,12 @@ class RepoSession:
     def detach_call(self, call: Call) -> None:
         if self._call is call:
             self._call = None
+            self._call_page = None
+
+    def set_call_page(self, page: PageContext) -> None:
+        """call.page: remember the page in view; ignored without an active call."""
+        if self._call is not None:
+            self._call_page = page
 
     def _notify_action(self) -> NotifyAction:
         return "open" if self._call is not None else "call"
@@ -443,8 +451,10 @@ class RepoSession:
         self._unseen.append(interrupted_note(heard))
 
     def _voice_page(self, picks: Sequence[Pick]) -> PageContext | None:
-        """Voice turns carry no screenshot: use the page of the first pick, else the
-        page of the last typed turn (without its old screenshot)."""
+        """The latest call.page (with its screenshot), else the page of the first
+        pick, else the page of the last typed turn (without its old screenshot)."""
+        if self._call_page is not None:
+            return self._call_page
         for pick in picks:
             p = pick.page
             return PageContext(url=p.url, route=p.route, title=p.title, viewport=p.viewport)
@@ -460,6 +470,7 @@ class RepoSession:
         refs = self.picks.resolve(pick_ids)
         picks = [r for r in refs if isinstance(r, Pick)]
         page = self._voice_page(picks)
+        attached = False
 
         def build(notes: list[str]) -> str:
             return render_talker_turn(
@@ -467,12 +478,16 @@ class RepoSession:
                 notes,
                 picks=refs,
                 page=page,
-                screenshot_attached=False,
+                screenshot_attached=attached,
                 spoken=True,
                 continuation=continuation,
             )
 
-        return self._voice_stream(build, picks, page)
+        def on_image(found: bool) -> None:
+            nonlocal attached
+            attached = found
+
+        return self._voice_stream(build, picks, page, on_image)
 
     def voice_announcement(self, *, opening: bool) -> AsyncGenerator[str, None] | None:
         """One spoken update for every pending announcement (SPEC §6.7), or None."""
@@ -490,6 +505,7 @@ class RepoSession:
         build: Callable[[list[str]], str],
         picks: Sequence[Pick],
         page: PageContext | None,
+        on_image: Callable[[bool], None] | None = None,
     ) -> AsyncGenerator[str, None]:
         queue: asyncio.Queue[str | None] = asyncio.Queue()
         talking = asyncio.Event()
@@ -498,10 +514,17 @@ class RepoSession:
             try:
                 async with self._talker_lock:
                     notes = self._take_notes()
-                    crops = await asyncio.to_thread(self._crops, picks, MAX_TURN_IMAGES)
+                    image: Image | None = None
+                    if on_image is not None and page is not None and page.screenshot:
+                        image = await asyncio.to_thread(self.uploads.load, page.screenshot)
+                        if image is None:
+                            log.warning("call screenshot %s not found", page.screenshot)
+                        on_image(image is not None)
+                    limit = MAX_TURN_IMAGES - (1 if image is not None else 0)
+                    crops = await asyncio.to_thread(self._crops, picks, limit)
                     talking.set()
                     await self._invoke_talker(
-                        build(notes), queue.put_nowait, None, crops, notes, page, picks, True
+                        build(notes), queue.put_nowait, image, crops, notes, page, picks, True
                     )
             finally:
                 queue.put_nowait(None)

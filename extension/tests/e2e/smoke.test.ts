@@ -472,6 +472,11 @@ describe('extension smoke', () => {
       .poll(() => sw.evaluate(() => (globalThis as unknown as { __sidecall: { callLog: { ev: string }[] } }).__sidecall.callLog.some((m) => m.ev === 'answered')), { timeout: 10_000 })
       .toBe(true);
     await expect.poll(() => panel.locator('.composer').textContent()).toContain('On a call');
+    // Reaching listening sends the page in view, screenshot uploaded first.
+    const callPage = (await daemon.waitFor('call.page')).payload.page;
+    expect(callPage.url.startsWith(appOrigin)).toBe(true);
+    expect(callPage.screenshot).toMatch(/^[0-9a-f]{32}$/);
+    expect(daemon.uploads.get(callPage.screenshot ?? '')).toBeDefined();
 
     // 3. Live partial transcript, then thinking.
     daemon.broadcast(serverMsg('transcript.partial', { text: 'make the button' }));

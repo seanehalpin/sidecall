@@ -26,6 +26,7 @@ from .config import Config
 from .protocol.messages import (
     CallEnd,
     CallMute,
+    CallPage,
     CallStart,
     ErrorMsg,
     ErrorPayload,
@@ -370,6 +371,10 @@ class Daemon:
             (UserText, TaskCancel, TaskReorder, SettingsUpdate, PickAdd, PickRemove, PicksClear),
         ):
             await self._repo_message(conn, msg)
+        elif isinstance(msg, CallPage):
+            # Without an active call (it ended mid-flight), drop it quietly.
+            if conn.call is not None and conn.session is not None:
+                conn.session.set_call_page(msg.payload.page)
         elif isinstance(msg, (CallStart, CallEnd, CallMute, WebRTCOffer, WebRTCIceIn)):
             await self._call_message(conn, msg)
         else:

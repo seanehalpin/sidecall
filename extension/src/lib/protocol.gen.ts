@@ -15,6 +15,7 @@ export type ClientMessage =
   | CallStart
   | CallEnd
   | CallMute
+  | CallPage
   | TaskCancel
   | TaskReorder
   | ApprovalRespond
@@ -374,6 +375,25 @@ export interface CallMute {
  */
 export interface CallMutePayload {
   muted: boolean;
+}
+/**
+ * The page in view during a call; spoken turns use the latest one (SPEC §5.6).
+ *
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "CallPage".
+ */
+export interface CallPage {
+  id: string;
+  payload: CallPagePayload;
+  ts: number;
+  type: 'call.page';
+}
+/**
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "CallPagePayload".
+ */
+export interface CallPagePayload {
+  page: PageContext;
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema

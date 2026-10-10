@@ -13,7 +13,18 @@ from typing import Any
 import pytest
 from helpers import make_brief, make_pick
 from starlette.testclient import TestClient
-from test_server import APP, APP2, FakeTalker, FakeWorker, Msg, bound, hello, send, until
+from test_server import (
+    APP,
+    APP2,
+    FakeTalker,
+    FakeWorker,
+    Msg,
+    bound,
+    hello,
+    send,
+    until,
+    upload,
+)
 
 from sidecall.announcer import QUIET_MS
 from sidecall.config import Config
@@ -604,6 +615,42 @@ def test_call_signalling_and_voice_turn_through_the_talker(
         until(ws, "call.state", _state("idle"))
         assert backend.stopped == 1
         assert not session.call_active
+    finally:
+        ws.__exit__(None, None, None)
+
+
+def test_spoken_turn_uses_latest_call_page(
+    client: TestClient, daemon: Daemon, config: Config, repo: Path
+) -> None:
+    ws = bound(client, config, repo)
+    try:
+        # call.page without a call is ignored silently.
+        page = {
+            "url": f"{APP}/a",
+            "route": "/a",
+            "title": "A",
+            "viewport": {"w": 800, "h": 600, "dpr": 1},
+        }
+        send(ws, "call.page", {"page": page})
+        send(ws, "call.start")
+        until(ws, "call.state")
+        send(ws, "webrtc.offer", {"sdp": "v=0 browser"})
+        until(ws, "webrtc.answer")
+        ref = upload(client, config.token).json()["ref"]
+        send(ws, "call.page", {"page": {**page, "screenshot": None}})
+        send(
+            ws, "call.page", {"page": {**page, "url": f"{APP}/b", "route": "/b", "screenshot": ref}}
+        )
+        assert client.portal is not None
+        backend = FakeBackend.instances[-1]
+        client.portal.call(backend.say, "chat")
+        until(ws, "transcript.final", _role("agent"))
+        talker = FakeTalker.instances[-1]
+        assert "/b" in talker.prompts[-1] and "/a\n" not in talker.prompts[-1]
+        assert "screenshot" in talker.prompts[-1]
+        assert talker.images[-1] is not None
+        send(ws, "call.end")
+        until(ws, "call.state", _state("idle"))
     finally:
         ws.__exit__(None, None, None)
 

@@ -78,6 +78,10 @@ class CallMutePayload(Model):
     muted: bool
 
 
+class CallPagePayload(Model):
+    page: PageContext
+
+
 class TaskCancelPayload(Model):
     id: str
 
@@ -165,6 +169,13 @@ class CallMute(Envelope):
     payload: CallMutePayload
 
 
+class CallPage(Envelope):
+    """The page in view during a call; spoken turns use the latest one (SPEC §5.6)."""
+
+    type: Literal["call.page"] = "call.page"
+    payload: CallPagePayload
+
+
 class TaskCancel(Envelope):
     type: Literal["task.cancel"] = "task.cancel"
     payload: TaskCancelPayload
@@ -212,6 +223,7 @@ ClientMessage = Annotated[
     | CallStart
     | CallEnd
     | CallMute
+    | CallPage
     | TaskCancel
     | TaskReorder
     | ApprovalRespond

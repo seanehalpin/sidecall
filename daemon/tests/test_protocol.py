@@ -131,3 +131,12 @@ def test_task_carries_page() -> None:
     assert Task.model_validate_json(task.model_dump_json()) == task
     bare = Task(id="t2", title="x", brief=task.brief, created_at=1.0)
     assert json.loads(bare.model_dump_json())["page"] is None
+
+
+def test_call_page_round_trip() -> None:
+    from sidecall.protocol.messages import CallPage
+
+    raw = json.dumps({"type": "call.page", "id": "x", "ts": 0, "payload": {"page": PAGE_WIRE}})
+    msg = parse_client(raw)
+    assert isinstance(msg, CallPage)
+    assert json.loads(msg.model_dump_json())["payload"]["page"] == PAGE_WIRE

@@ -48,6 +48,7 @@ import {
 import { AckWaiter } from '@/lib/picks/ack';
 import { buildChip, buildPin } from '@/lib/picks/chip';
 import { createCaptureGate } from '@/lib/picks/gate';
+import { callPageSent, callPageStep, initialCallPageState, type CallPageEvent } from '@/lib/call-page';
 import { derivePickImages } from '@/lib/picks/images';
 import { daemonTime, nextPickId, picksToDimForTurn, selectPickIds } from '@/lib/picks/turn';
 import { allowedOrigin } from '@/lib/origin';
@@ -266,7 +267,11 @@ export default defineBackground(() => {
       case 'task.created':
         consumePicks(msg.payload.pickIds);
         break;
+      case 'transcript.partial':
+        callPageTrigger('partial');
+        break;
       case 'transcript.final':
+        callPageTrigger('final');
         // A spoken turn: the daemon bound it to picks by time; dim them like a typed turn.
         dimPicks(picksToDimForTurn(state.picks, msg.payload));
         break;
@@ -277,6 +282,11 @@ export default defineBackground(() => {
         // The daemon ended the call (or never had one): tear ours down.
         if (msg.payload.state === 'idle' && state.inCall) {
           void endCall({ notifyDaemon: false });
+          return;
+        }
+        if (msg.payload.state === 'listening' && state.inCall && state.callState !== 'listening') {
+          setState(applyServerMessage(state, msg));
+          callPageTrigger('listening');
           return;
         }
         break;
@@ -372,6 +382,40 @@ export default defineBackground(() => {
       console.warn('[sidecall] screenshot skipped:', err);
       return base;
     }
+  }
+
+  // --- Page context for spoken turns (call.page) ------------------------------
+
+  let callPage = initialCallPageState;
+  let callPageTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function resetCallPage(): void {
+    callPage = initialCallPageState;
+    if (callPageTimer !== null) clearTimeout(callPageTimer);
+    callPageTimer = null;
+  }
+
+  function callPageTrigger(ev: CallPageEvent): void {
+    if (!state.inCall) return;
+    const step = callPageStep(callPage, ev, Date.now());
+    callPage = step.state;
+    if (step.action.kind === 'now') sendCallPage();
+    else if (step.action.kind === 'after' && callPageTimer === null) {
+      callPageTimer = setTimeout(() => {
+        callPageTimer = null;
+        sendCallPage();
+      }, step.action.ms);
+    }
+  }
+
+  /** Gather the page (screenshot included, through the capture gate) and send it; never blocks. */
+  function sendCallPage(): void {
+    if (!state.inCall || !token) return;
+    callPage = callPageSent(callPage, Date.now());
+    void gatherPage().then((page) => {
+      // gatherPage is null off the bound origin: skip.
+      if (page && state.inCall && token) send(envelope('call.page', { page }));
+    });
   }
 
   // user.text turns go out in order, each after its page context is gathered.
@@ -673,6 +717,7 @@ export default defineBackground(() => {
       local({ kind: 'error', error: { code: 'not_connected', message: 'Connect to a repo to start a call.' } });
       return;
     }
+    resetCallPage();
     local({ kind: 'callStarting' });
     send(envelope('call.start', {}));
     try {
@@ -685,6 +730,7 @@ export default defineBackground(() => {
 
   async function endCall(opts: { notifyDaemon?: boolean; error?: { code: string; message: string } } = {}): Promise<void> {
     const wasInCall = state.inCall;
+    resetCallPage();
     local({ kind: 'callEnded', ...(opts.error ? { error: opts.error } : {}) });
     if (wasInCall && opts.notifyDaemon !== false && token) send(envelope('call.end', {}));
     await closeOffscreen();
@@ -892,11 +938,13 @@ export default defineBackground(() => {
 
   browser.tabs.onActivated.addListener((info) => {
     rememberWindow(info.windowId);
-    void ready.then(refreshOrigin);
+    void ready.then(refreshOrigin).then(() => callPageTrigger('tab'));
   });
   browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
     if (!tab.active || (change.url === undefined && change.status === undefined)) return;
-    void ready.then(refreshOrigin);
+    void ready.then(refreshOrigin).then(() => {
+      if (change.status === 'complete') callPageTrigger('tab');
+    });
   });
   browser.windows.onFocusChanged.addListener((windowId) => {
     if (windowId === browser.windows.WINDOW_ID_NONE) return;

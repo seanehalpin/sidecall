@@ -358,6 +358,50 @@
       "title": "CallMutePayload",
       "type": "object"
     },
+    "CallPage": {
+      "additionalProperties": false,
+      "description": "The page in view during a call; spoken turns use the latest one (SPEC \u00a75.6).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CallPagePayload"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "call.page",
+          "default": "call.page",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "CallPage",
+      "type": "object"
+    },
+    "CallPagePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/PageContext"
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "title": "CallPagePayload",
+      "type": "object"
+    },
     "CallStart": {
       "additionalProperties": false,
       "properties": {
@@ -2774,6 +2818,7 @@
           "approval.respond": "#/$defs/ApprovalRespond",
           "call.end": "#/$defs/CallEnd",
           "call.mute": "#/$defs/CallMute",
+          "call.page": "#/$defs/CallPage",
           "call.start": "#/$defs/CallStart",
           "hello": "#/$defs/Hello",
           "pair.request": "#/$defs/PairRequest",
@@ -2825,6 +2870,9 @@
         },
         {
           "$ref": "#/$defs/CallMute"
+        },
+        {
+          "$ref": "#/$defs/CallPage"
         },
         {
           "$ref": "#/$defs/TaskCancel"

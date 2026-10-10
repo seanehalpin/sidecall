@@ -391,6 +391,7 @@ Field names are camelCase on the wire. The exact shapes live in `daemon/src/side
 - `pick.add {Pick}`, `pick.remove {id}`, `picks.clear` (none gets a reply; `remove` of an unknown id is a no-op)
 - `user.text {text, pickIds, page}` (page context, §5.6)
 - `call.start`, `call.end`, `call.mute {muted}`
+- `call.page {page: PageContext}`: during a call, the page in view (screenshot included). Sent when the call reaches listening, on tab activation/navigation, and when a new utterance starts; at most one per 2 s, skipped off the bound origin. A spoken turn's page is the latest call page, else the first pick's page, else the last typed turn's page. Ignored without an active call.
 - `task.cancel {id}`, `task.reorder {ids}`
 - `approval.respond {id, allow}`
 - `settings.update {preset}`
