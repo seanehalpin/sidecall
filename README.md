@@ -6,14 +6,14 @@ The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.m
 
 ## Status
 
-**Milestone 1 is done: you can type a change in the side panel and Claude makes it.** Pointing (⌥-click) arrives in Milestone 2 and voice in Milestone 3.
+**Milestone 2 is built: you can ⌥-click elements on your page, refer to them as `[1]`, `[2]`, and Claude makes the change.** Voice arrives in Milestone 3.
 
 | Milestone | What you get | Status |
 |---|---|---|
 | 0. Spikes | Each risky piece proven on its own | ✅ Done ([M0 notes](docs/milestones/M0.md)) |
-| 1. Daemon core and text rail | Type a change in the side panel; Claude makes it | ✅ Built, awaiting your check ([M1 notes](docs/milestones/M1.md)) |
-| 2. Picker | ⌥-click elements and reference them as `[1]`, `[2]` | Next |
-| 3. Voice | Talk instead of typing, with interruptions | |
+| 1. Daemon core and text rail | Type a change in the side panel; Claude makes it | ✅ Done ([M1 notes](docs/milestones/M1.md)) |
+| 2. Picker | ⌥-click elements and reference them as `[1]`, `[2]` | ✅ Built, awaiting your check ([M2 notes](docs/milestones/M2.md)) |
+| 3. Voice | Talk instead of typing, with interruptions | Next |
 | 4. Settings and persistence | Presets, notes, resume across restarts | |
 
 ## Requirements
@@ -58,6 +58,16 @@ If you're working on the extension itself, run `pnpm dev` instead and load `exte
 4. When it asks which folder the app's code lives in, paste the repo path or click **Choose folder…**. Sidecall remembers it for that `localhost` address.
 
 **4. Ask for a change.** Type, for example, "make the heading on the home page red", and press Enter. The agent confirms what it's going to do and queues a task. Claude Code edits the code in the background, the page hot-reloads, and the panel shows when it's done.
+
+**5. Point at things.** With your app open in the active tab, hold **⌥ (Option)** and move the mouse: the element under it is highlighted, labelled with its component and `file:line`.
+
+- **⌥-click** picks an element and **⌥-drag** picks a region. A numbered pin appears on the page, and a chip appears in the pick tray in the side panel.
+- **↑ / ↓** (while holding ⌥ over an element) move the selection to its parent or child. **Esc** clears the current picks.
+- Refer to picks in your message as `[1]`, `[2]`, or click a chip in the tray to insert its marker. For example: "make [1] match the spacing on [2]".
+- Picking one item in a repeated list (say one of twelve cards) tells the agent it's one instance of a template, so the edit goes into the shared component rather than one copy.
+- Hovering a chip highlights its pin on the page. Pins stay on their elements through hot reloads and page reloads.
+
+**What else to know**
 
 - **Installing packages** shows an approval card in the panel. Nothing installs until you click Approve.
 - **`git push`** is always refused.
@@ -147,6 +157,8 @@ If a port is taken, set another one: `PORT=5273 pnpm dev`.
 
 ## Troubleshooting
 
+- **⌥-click does nothing.** The picker only runs on `http://localhost:…` and `http://127.0.0.1:…` pages, and the extension needs reloading after a rebuild (click the reload icon in `chrome://extensions`, then refresh the page). With Svelte, wait for the page to finish loading: source locations are attached when it hydrates.
+- **A pick shows no file or line.** The app isn't a Svelte 5 or React 18/19 dev build, or it's a production build. The agent will search by class names and text instead.
 - **The panel says "Daemon offline".** Start it with `cd daemon && uv run sidecall start`. The panel reconnects within about 30 s.
 - **The panel says "No local app".** The active tab has to be a `http://localhost:…` or `http://127.0.0.1:…` page.
 - **Lost the pairing code.** Restart the daemon; it prints a new one each time it starts.
