@@ -11,6 +11,8 @@ import type {
   Task,
   TranscriptEntry,
 } from './protocol';
+import type { PickChip } from './picker-protocol';
+import { chipTitle } from './picks/chip';
 
 export type ConnectionStatus = 'offline' | 'connecting' | 'connected';
 
@@ -29,6 +31,14 @@ export interface RailError {
   code: string;
   message: string;
 }
+
+/** What an old [n] marker in the transcript shows once its pick is gone. */
+export interface PickHistoryEntry {
+  label: string;
+  tooltip: string;
+}
+
+export const PICK_HISTORY_LIMIT = 200;
 
 export interface RailState {
   connection: ConnectionStatus;
@@ -51,6 +61,12 @@ export interface RailState {
   settings: Settings | null;
   callState: CallState;
   clockOffset: number | null;
+  /** Live picks (this and earlier turns until consumed by a task or cleared), by id. */
+  picks: PickChip[];
+  /** Label and tooltip of every pick seen this session, so old transcript markers keep tooltips. */
+  pickHistory: Record<number, PickHistoryEntry>;
+  /** The repo origin the live picks belong to; a welcome for another repo drops them. */
+  picksOrigin: string | null;
   lastError: RailError | null;
 }
 
@@ -72,6 +88,9 @@ export function initialRailState(): RailState {
     settings: null,
     callState: 'idle',
     clockOffset: null,
+    picks: [],
+    pickHistory: {},
+    picksOrigin: null,
     lastError: null,
   };
 }
@@ -82,7 +101,12 @@ export type LocalEvent =
   | { kind: 'paired'; paired: boolean }
   | { kind: 'origin'; origin: string | null }
   | { kind: 'error'; error: RailError }
-  | { kind: 'clearError' };
+  | { kind: 'clearError' }
+  | { kind: 'pickAdd'; chip: PickChip; origin: string | null }
+  | { kind: 'pickPatch'; id: number; patch: Partial<Pick<PickChip, 'status' | 'stale'>> }
+  | { kind: 'picksRemove'; ids: number[] }
+  | { kind: 'picksClear' }
+  | { kind: 'picksDim'; ids: number[]; dimmed: boolean };
 
 const PER_REPO_RESET: Pick<
   RailState,
@@ -136,9 +160,11 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
   switch (msg.type) {
     case 'welcome': {
       const { repo, state: rs, clockOffset } = msg.payload;
+      const otherRepo = state.picksOrigin !== null && state.picksOrigin !== repo.origin;
       return {
         ...state,
         ...PER_REPO_RESET,
+        ...(otherRepo ? { picks: [], pickHistory: {}, picksOrigin: null } : {}),
         repo,
         repoUnknown: null,
         noOrigin: false,
@@ -227,8 +253,12 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
       transcript[i] = { ...existing, streaming: false };
       return { ...state, transcript };
     }
-    case 'task.created':
-      return { ...state, tasks: upsertTask(state.tasks, msg.payload) };
+    case 'task.created': {
+      // Picks the task consumed leave the live set (SPEC §6.9); history keeps their tooltips.
+      const used = new Set(msg.payload.pickIds);
+      const picks = state.picks.some((p) => used.has(p.id)) ? state.picks.filter((p) => !used.has(p.id)) : state.picks;
+      return { ...state, picks, tasks: upsertTask(state.tasks, msg.payload) };
+    }
     case 'queue.state': {
       const tasks = msg.payload.tasks;
       const lastTaskEvent: Record<string, string> = {};
@@ -310,6 +340,39 @@ export function applyLocalEvent(state: RailState, ev: LocalEvent): RailState {
       return { ...state, lastError: ev.error };
     case 'clearError':
       return state.lastError ? { ...state, lastError: null } : state;
+    case 'pickAdd': {
+      const picks = [...state.picks.filter((p) => p.id !== ev.chip.id), ev.chip].sort((a, b) => a.id - b.id);
+      const pickHistory = { ...state.pickHistory, [ev.chip.id]: { label: chipTitle(ev.chip), tooltip: ev.chip.tooltip } };
+      const ids = Object.keys(pickHistory).map(Number);
+      if (ids.length > PICK_HISTORY_LIMIT) {
+        ids.sort((a, b) => a - b);
+        for (const old of ids.slice(0, ids.length - PICK_HISTORY_LIMIT)) delete pickHistory[old];
+      }
+      return { ...state, picks, pickHistory, picksOrigin: ev.origin ?? state.picksOrigin };
+    }
+    case 'pickPatch': {
+      const i = state.picks.findIndex((p) => p.id === ev.id);
+      const cur = state.picks[i];
+      if (!cur) return state;
+      if ((ev.patch.status === undefined || ev.patch.status === cur.status) && (ev.patch.stale === undefined || ev.patch.stale === cur.stale)) {
+        return state;
+      }
+      const picks = state.picks.slice();
+      picks[i] = { ...cur, ...ev.patch };
+      return { ...state, picks };
+    }
+    case 'picksRemove': {
+      const gone = new Set(ev.ids);
+      if (!state.picks.some((p) => gone.has(p.id))) return state;
+      return { ...state, picks: state.picks.filter((p) => !gone.has(p.id)) };
+    }
+    case 'picksClear':
+      return state.picks.length ? { ...state, picks: [] } : state;
+    case 'picksDim': {
+      const which = new Set(ev.ids);
+      if (!state.picks.some((p) => which.has(p.id) && p.dimmed !== ev.dimmed)) return state;
+      return { ...state, picks: state.picks.map((p) => (which.has(p.id) ? { ...p, dimmed: ev.dimmed } : p)) };
+    }
   }
 }
 

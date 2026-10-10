@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { PickChip } from '../../src/lib/picker-protocol';
 import {
   applyLocalEvent,
   applyServerMessage,
@@ -356,4 +357,61 @@ describe('daemon error codes', () => {
       expect(applyLocalEvent(s, { kind: 'clearError' }).lastError).toBeNull();
     },
   );
+});
+
+describe('picks in rail state', () => {
+  const chip = (id: number, patch: Partial<PickChip> = {}): PickChip => ({
+    id,
+    kind: 'element',
+    label: 'div.x',
+    tooltip: 'src/a.svelte:1:1 (element)',
+    component: null,
+    source: null,
+    repeat: null,
+    stale: false,
+    dimmed: false,
+    status: 'capturing',
+    ...patch,
+  });
+  const withPicks = () =>
+    [1, 2, 3].reduce((s, id) => applyLocalEvent(s, { kind: 'pickAdd', chip: chip(id), origin: 'http://localhost:5173' }), initialRailState());
+
+  it('adds chips sorted, records history and origin', () => {
+    const s = applyLocalEvent(withPicks(), { kind: 'pickAdd', chip: chip(0 + 2, { label: 'h3' }), origin: null });
+    expect(s.picks.map((p) => p.id)).toEqual([1, 2, 3]);
+    expect(s.picks[1]?.label).toBe('h3');
+    expect(s.pickHistory[1]).toEqual({ label: 'div.x', tooltip: 'src/a.svelte:1:1 (element)' });
+    expect(s.picksOrigin).toBe('http://localhost:5173');
+  });
+  it('patches status and stale, no-op when unchanged', () => {
+    const s = withPicks();
+    const r = applyLocalEvent(s, { kind: 'pickPatch', id: 1, patch: { status: 'ready' } });
+    expect(r.picks[0]?.status).toBe('ready');
+    expect(applyLocalEvent(r, { kind: 'pickPatch', id: 1, patch: { status: 'ready' } })).toBe(r);
+    expect(applyLocalEvent(r, { kind: 'pickPatch', id: 9, patch: { stale: true } })).toBe(r);
+    expect(applyLocalEvent(r, { kind: 'pickPatch', id: 2, patch: { stale: true } }).picks[1]?.stale).toBe(true);
+  });
+  it('dims, removes (keeping history) and clears', () => {
+    let s = applyLocalEvent(withPicks(), { kind: 'picksDim', ids: [1, 2], dimmed: true });
+    expect(s.picks.map((p) => p.dimmed)).toEqual([true, true, false]);
+    s = applyLocalEvent(s, { kind: 'picksRemove', ids: [2] });
+    expect(s.picks.map((p) => p.id)).toEqual([1, 3]);
+    expect(s.pickHistory[2]).toBeDefined();
+    expect(applyLocalEvent(applyLocalEvent(s, { kind: 'picksClear' }), { kind: 'picksClear' }).picks).toEqual([]);
+  });
+  it('task.created with pickIds consumes those picks', () => {
+    const s = applyServerMessage(withPicks(), msg('task.created', task('t1', { pickIds: [1, 3] })));
+    expect(s.picks.map((p) => p.id)).toEqual([2]);
+    expect(s.pickHistory[1]).toBeDefined();
+  });
+  it('keeps picks across a welcome for the same repo, drops them for another', () => {
+    const w = (origin: string) =>
+      msg('welcome', { repo: { ...repo, origin }, clockOffset: 42, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } } });
+    const same = applyServerMessage(withPicks(), w('http://localhost:5173'));
+    expect(same.picks).toHaveLength(3);
+    expect(same.clockOffset).toBe(42);
+    const other = applyServerMessage(withPicks(), w('http://localhost:3000'));
+    expect(other.picks).toEqual([]);
+    expect(other.pickHistory).toEqual({});
+  });
 });

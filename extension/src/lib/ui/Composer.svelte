@@ -1,7 +1,15 @@
 <script lang="ts">
-  let { disabled, onsend }: { disabled: boolean; onsend: (text: string) => void } = $props();
+  import { tick } from 'svelte';
+  import { insertAtRange } from '../picks/insert';
+
+  let {
+    disabled,
+    showPickHint = false,
+    onsend,
+  }: { disabled: boolean; showPickHint?: boolean; onsend: (text: string) => void } = $props();
 
   let text = $state('');
+  let field: HTMLTextAreaElement | undefined = $state();
 
   function submit() {
     const value = text.trim();
@@ -16,6 +24,20 @@
       submit();
     }
   }
+
+  /**
+   * Insert `snippet` (e.g. "[2]") at the caret. The textarea keeps its selection
+   * while blurred (and sits at the end if never focused), so clicking a tray chip
+   * lands where the user was typing.
+   */
+  export async function insertAtCursor(snippet: string) {
+    if (disabled || !field) return;
+    const result = insertAtRange(text, field.selectionStart, field.selectionEnd, snippet);
+    text = result.text;
+    await tick();
+    field.focus();
+    field.setSelectionRange(result.caret, result.caret);
+  }
 </script>
 
 <form
@@ -26,6 +48,7 @@
   }}
 >
   <textarea
+    bind:this={field}
     bind:value={text}
     {onkeydown}
     {disabled}
@@ -34,7 +57,13 @@
     aria-label="Message"
   ></textarea>
   <div class="row">
-    <span class="hint muted">Type your request · voice is coming in a later update</span>
+    <span class="hint muted">
+      {#if showPickHint}
+        <span class="pick-hint">⌥-click elements on the page, then refer to them as [1], [2]</span>
+      {:else}
+        Type your request · voice is coming in a later update
+      {/if}
+    </span>
     <button class="primary" type="submit" disabled={disabled || text.trim() === ''}>Send</button>
   </div>
 </form>
@@ -59,6 +88,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
   }
   .hint {
     font-size: 11px;

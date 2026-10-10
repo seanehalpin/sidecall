@@ -6,6 +6,7 @@
   import Approvals from '@/lib/ui/Approvals.svelte';
   import Composer from '@/lib/ui/Composer.svelte';
   import Header from '@/lib/ui/Header.svelte';
+  import PickTray from '@/lib/ui/PickTray.svelte';
   import Pairing from '@/lib/ui/Pairing.svelte';
   import RepoSetup from '@/lib/ui/RepoSetup.svelte';
   import TaskQueue from '@/lib/ui/TaskQueue.svelte';
@@ -19,6 +20,8 @@
   // Errors with their own inline place (pairing, repo setup) aren't bannered.
   const INLINE_ERRORS = new Set(['bad_pairing_code', 'unauthorized', 'bad_path', 'browse_cancelled', 'no_origin']);
   const banner = $derived(view === 'main' && rail.lastError && !INLINE_ERRORS.has(rail.lastError.code) ? rail.lastError : null);
+
+  let composer: Composer | undefined = $state();
 
   function openSettings() {
     void browser.runtime.openOptionsPage();
@@ -40,7 +43,13 @@
         <button onclick={() => client.command({ cmd: 'clearError' })} aria-label="Dismiss">×</button>
       </div>
     {/if}
-    <Transcript entries={rail.transcript} partial={rail.partial} />
+    <Transcript
+      entries={rail.transcript}
+      partial={rail.partial}
+      picks={rail.picks}
+      pickHistory={rail.pickHistory}
+      onhighlight={(id) => client.command({ cmd: 'pickHighlight', id })}
+    />
     <TaskQueue
       tasks={rail.tasks}
       lastTaskEvent={rail.lastTaskEvent}
@@ -48,7 +57,13 @@
       oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
       onreorder={(ids) => client.send({ type: 'task.reorder', payload: { ids } })}
     />
-    <!-- Pick tray: Milestone 2. -->
+    <PickTray
+      picks={rail.picks}
+      onhover={(id) => client.command({ cmd: 'pickHighlight', id })}
+      oninsert={(id) => void composer?.insertAtCursor(`[${id}]`)}
+      onremove={(id) => client.command({ cmd: 'pickRemove', id })}
+      onclear={() => client.command({ cmd: 'picksClear' })}
+    />
   {:else}
     <div class="blocking">
       {#if view === 'offline'}
@@ -78,7 +93,9 @@
   {/if}
 
   <Composer
+    bind:this={composer}
     disabled={!sendable}
+    showPickHint={view === 'main' && rail.picks.length === 0}
     onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
   />
 </div>

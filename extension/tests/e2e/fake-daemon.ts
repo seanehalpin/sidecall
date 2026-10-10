@@ -38,6 +38,10 @@ export class FakeDaemon {
   readonly uploads = new Map<string, Upload>();
   /** Every upload attempt's status code, accepted or not. */
   readonly uploadStatuses: number[] = [];
+  /** Reject uploads with HTTP 500 (to test pick.add without screenshots). */
+  failUploads = false;
+  /** welcome.clockOffset: daemon_now - clockSample. */
+  clockOffset = 0;
   pairingCode = '123456';
   token = 'tok-test';
   state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } };
@@ -76,6 +80,7 @@ export class FakeDaemon {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
+      if (this.failUploads) return reply(500, { error: 'boom' });
       if (req.headers.origin !== EXT_ORIGIN) return reply(403, { error: 'forbidden' });
       if (req.headers.authorization !== `Bearer ${this.token}`) return reply(401, { error: 'unauthorized' });
       const contentType = req.headers['content-type'];
@@ -195,7 +200,7 @@ export class FakeDaemon {
       this.send(ws, serverMsg('repo.unknown', { origin }));
       return;
     }
-    this.send(ws, serverMsg('welcome', { repo, state: this.state, clockOffset: 0 }));
+    this.send(ws, serverMsg('welcome', { repo, state: this.state, clockOffset: this.clockOffset }));
   }
 
   async close(): Promise<void> {

@@ -1,6 +1,7 @@
 // Messages between extension pages (rail, options) and the service worker.
 // Pages connect with chrome.runtime.connect({ name }) and the worker pushes the
 // full RailState on every change.
+import type { PickCommand } from './picker-protocol';
 import type { ClientDraft } from './protocol';
 import type { RailState } from './rail-state';
 
@@ -16,6 +17,10 @@ export const STORAGE_KEYS = {
   /** chrome.storage.session */
   railState: 'railState',
   lastWindowId: 'lastWindowId',
+  /** Last pick id handed out; survives a worker restart so ids are never reused. */
+  pickCounter: 'pickCounter',
+  /** Full Pick payloads + anchors of live picks, so they can be re-sent and re-pinned. */
+  pickStore: 'pickStore',
 } as const;
 
 export const DEFAULT_DAEMON_PORT = 7823;
@@ -30,7 +35,8 @@ export type PageCommand =
   | { cmd: 'setPort'; port: number }
   | { cmd: 'reconnect' }
   | { cmd: 'clearError' }
-  | { cmd: 'openOptions' };
+  | { cmd: 'openOptions' }
+  | PickCommand;
 
 export type WorkerMessage = { kind: 'state'; state: RailState; daemonPort: number };
 

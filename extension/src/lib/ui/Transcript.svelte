@@ -1,7 +1,23 @@
 <script lang="ts">
-  import type { TranscriptItem } from '../rail-state';
+  import type { PickChip } from '../picker-protocol';
+  import { segmentMarkers } from '../picks/markers';
+  import type { PickHistoryEntry, TranscriptItem } from '../rail-state';
 
-  let { entries, partial }: { entries: TranscriptItem[]; partial: string | null } = $props();
+  let {
+    entries,
+    partial,
+    picks = [],
+    pickHistory = {},
+    onhighlight = () => {},
+  }: {
+    entries: TranscriptItem[];
+    partial: string | null;
+    picks?: PickChip[];
+    pickHistory?: Record<number, PickHistoryEntry>;
+    onhighlight?: (id: number | null) => void;
+  } = $props();
+
+  const liveIds = $derived(new Set(picks.map((p) => p.id)));
 
   let scroller: HTMLElement | undefined = $state();
   // Follow new content unless the user has scrolled up to read.
@@ -30,7 +46,7 @@
       {#if entry.role === 'system'}
         <span>{entry.text}</span>
       {:else}
-        <div class="bubble">{entry.text}{#if entry.streaming}<span class="caret" aria-hidden="true"></span>{/if}</div>
+        <div class="bubble">{#if entry.role === 'user'}{#each segmentMarkers(entry.text) as seg, i (i)}{#if seg.kind === 'marker' && pickHistory[seg.id]}{@const known = pickHistory[seg.id]}{@const live = liveIds.has(seg.id)}<span class="marker" class:live data-marker={seg.id} title={`${known?.label ?? ''}\n${known?.tooltip ?? ''}`} role="presentation" onmouseenter={() => live && onhighlight(seg.id)} onmouseleave={() => live && onhighlight(null)}>{seg.raw}</span>{:else if seg.kind === 'marker'}{seg.raw}{:else}{seg.text}{/if}{/each}{:else}{entry.text}{/if}{#if entry.streaming}<span class="caret" aria-hidden="true"></span>{/if}</div>
       {/if}
     </div>
   {/each}
@@ -73,6 +89,20 @@
   .agent .bubble {
     background: var(--bg-subtle);
     border-bottom-left-radius: 4px;
+  }
+  .marker {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    cursor: default;
+  }
+  .marker.live {
+    cursor: pointer;
   }
   .partial .bubble {
     opacity: 0.6;

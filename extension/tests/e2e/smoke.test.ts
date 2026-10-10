@@ -31,6 +31,7 @@ function task(id: string, title: string, patch: Partial<Task> = {}): Task {
     error: null,
     lastEvent: null,
     page: null,
+    pickIds: [],
     ...patch,
   };
 }
@@ -224,6 +225,187 @@ describe('extension smoke', () => {
 
     await panel.locator('[data-task-id="t3"]').dragTo(panel.locator('[data-task-id="t2"]'));
     expect((await daemon.waitFor('task.reorder')).payload).toEqual({ ids: ['t3', 't2'] });
+  });
+
+  describe('picks (service worker + rail half)', () => {
+    type PageLogEntry = { tabId: number; msg: { t: string; [k: string]: unknown } };
+    const pageLog = () => sw.evaluate(() => (globalThis as unknown as { __sidecall: { pageLog: unknown[] } }).__sidecall.pageLog) as Promise<PageLogEntry[]>;
+    const logOf = async (t: string) => (await pageLog()).filter((e) => e.msg.t === t);
+    /** Stand-in for the page-side bridge: a runtime message from an extension page (tab falls back to the active tab). */
+    const fromPage = (msg: unknown) =>
+      panel.evaluate((m) => chrome.runtime.sendMessage({ kind: 'sidecall-picker-msg', msg: m }), msg);
+    const railCommand = (cmd: unknown) =>
+      panel.evaluate(
+        (c) =>
+          new Promise<void>((r) => {
+            const port = chrome.runtime.connect({ name: 'options' });
+            port.postMessage(c);
+            setTimeout(r, 50);
+          }),
+        cmd,
+      );
+    const anchor = { tag: 'h1', source: null, selector: 'h1', altSelectors: [], textFingerprint: 'home', repeatIndex: null, region: null };
+    async function pickMsg(localId: string) {
+      const viewport = await appPage.evaluate(() => ({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio }));
+      const rect = { x: 20, y: 20, w: 200, h: 50 };
+      return {
+        t: 'pick',
+        localId,
+        anchor,
+        rect,
+        viewport,
+        draft: {
+          kind: 'element',
+          page: { url: appPage.url(), route: '/', title: 'Fixture', viewport, scroll: { x: 0, y: 0 }, colorScheme: 'light', consoleErrors: [] },
+          element: { selector: 'h1', altSelectors: [], tag: 'h1', attributes: { class: 'title big' }, text: 'Home', outerHTML: '<h1>Home</h1>', rect, computedStyles: {} },
+          region: null,
+          framework: {
+            name: 'svelte',
+            version: '5',
+            source: { file: 'src/routes/+page.svelte', line: 3, column: 1, precision: 'element' },
+            componentChain: [{ name: 'Page', type: null, file: 'src/routes/+page.svelte', line: 1, column: 1 }],
+            props: {},
+          },
+          repeat: { count: 4, index: 1 },
+        },
+      };
+    }
+    const pickAdds = () => daemon.of('pick.add');
+
+    it('stores the daemon clock offset from welcome', async () => {
+      daemon.clockOffset = 60_000;
+      await railCommand({ cmd: 'reconnect' });
+      await expect.poll(async () => ((await sw.evaluate(() => chrome.storage.session.get('railState'))).railState as { clockOffset?: number } | undefined)?.clockOffset).toBe(60_000);
+      await expect.poll(() => panel.locator('.rail').getAttribute('data-view')).toBe('main');
+    });
+
+    it('a pick shows a chip, uploads crop + viewport and sends pick.add', async () => {
+      await panel.getByText('⌥-click elements on the page, then refer to them as [1], [2]').waitFor();
+      const before = Date.now();
+      await fromPage(await pickMsg('l1'));
+      const chip = panel.locator('[data-pick-id="1"]');
+      await chip.waitFor();
+      await expect.poll(() => chip.getAttribute('data-status')).toBe('ready');
+      await chip.getByText('[1]').waitFor();
+      await chip.getByText('Page', { exact: true }).waitFor();
+      expect(await chip.getAttribute('title')).toContain('src/routes/+page.svelte:3:1 (element) · repeated 4×, instance 2');
+
+      const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 1);
+      expect(add.payload.createdAt).toBeGreaterThanOrEqual(before + 60_000);
+      expect(add.payload.createdAt).toBeLessThan(Date.now() + 60_000 + 1);
+      const shots = add.payload.screenshots;
+      expect(shots).not.toBeNull();
+      const crop = daemon.uploads.get(shots?.crop ?? '');
+      const view = daemon.uploads.get(shots?.viewport ?? '');
+      expect([...(crop?.bytes.subarray(0, 3) ?? [])]).toEqual([0xff, 0xd8, 0xff]);
+      expect([...(view?.bytes.subarray(0, 3) ?? [])]).toEqual([0xff, 0xd8, 0xff]);
+      const c = jpegSize(crop?.bytes ?? Buffer.alloc(0));
+      const v = jpegSize(view?.bytes ?? Buffer.alloc(0));
+      // 232x82 CSS px (rect + 16 px margin) at 2x, native resolution.
+      expect(c).toEqual({ width: 464, height: 164 });
+      expect(v?.width).toBe(1568);
+      expect((c?.width ?? 0) * (c?.height ?? 0)).toBeLessThan((v?.width ?? 1) * (v?.height ?? 1));
+
+      // The page got the overlay hide/show around one capture, then the pin.
+      const sent = (await pageLog()).map((e) => e.msg.t + (e.msg.t === 'overlay-set' ? `:${String(e.msg.visible)}` : ''));
+      expect(sent.slice(-2)).toEqual(['overlay-set:true', 'pin-add']);
+      expect(sent.filter((t) => t === 'overlay-set:false')).toHaveLength(1);
+      const pin = (await logOf('pin-add')).at(-1)?.msg.pin as { id: number; label: string; dimmed: boolean };
+      expect(pin).toMatchObject({ id: 1, label: 'Page  src/routes/+page.svelte:3', dimmed: false });
+      // Without a picker in the tab nothing acks, so the hide was bounded, not hung.
+      await panel.getByText('⌥-click elements on the page').waitFor({ state: 'detached' });
+    });
+
+    it('tray hover highlights the pin; clicking a chip inserts [n] at the cursor', async () => {
+      await fromPage(await pickMsg('l2'));
+      await expect.poll(() => panel.locator('[data-pick-id="2"]').getAttribute('data-status')).toBe('ready');
+      await panel.locator('[data-pick-id="1"]').hover();
+      await expect.poll(async () => (await logOf('pin-highlight')).at(-1)?.msg.id).toBe(1);
+      await panel.mouse.move(5, 5);
+      await expect.poll(async () => (await logOf('pin-highlight')).at(-1)?.msg.id).toBeNull();
+
+      const composer = panel.getByLabel('Message');
+      await composer.fill('make  match');
+      await composer.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(5, 5));
+      await panel.locator('[data-pick-id="2"] button.main').click();
+      expect(await composer.inputValue()).toBe('make [2] match');
+      await panel.locator('[data-pick-id="1"] button.main').click();
+      expect(await composer.inputValue()).toBe('make [2] [1] match');
+    });
+
+    it('typing [1] and [2] sends pickIds, dims both, and task.created consumes them', async () => {
+      daemon.onUserText = (ws, m) => {
+        daemon.send(ws, serverMsg('transcript.final', { turnId: 'u9', role: 'user', text: m.payload.text, pickIds: m.payload.pickIds, taskId: null }));
+        daemon.send(ws, serverMsg('task.created', task('t9', 'Match', { pickIds: m.payload.pickIds })));
+      };
+      const composer = panel.getByLabel('Message');
+      await composer.fill('make [1] match [2]');
+      // Hold the daemon reply back so the dimmed state is observable.
+      await composer.press('Enter');
+      const ut = await daemon.waitFor('user.text', (m) => m.payload.text === 'make [1] match [2]');
+      expect(ut.payload.pickIds).toEqual([1, 2]);
+      await expect.poll(async () => (await logOf('pin-dim')).at(-1)?.msg.ids).toEqual([1, 2]);
+      // The transcript renders [n] as pills with the stored tooltip; text is unchanged.
+      const bubble = panel.locator('[data-role="user"]', { hasText: 'make [1] match [2]' }).last();
+      expect(await bubble.locator('.marker').count()).toBe(2);
+      expect(await bubble.locator('.marker').first().getAttribute('title')).toContain('src/routes/+page.svelte:3:1');
+      expect((await bubble.innerText()).trim()).toBe('make [1] match [2]');
+      // task.created with pickIds consumed them.
+      await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
+      const removed = (await logOf('pin-remove')).map((e) => e.msg.id);
+      expect(removed).toEqual(expect.arrayContaining([1, 2]));
+      await expect.poll(async () => (await sw.evaluate(() => chrome.storage.session.get('pickStore'))).pickStore).toEqual({});
+      daemon.onUserText = null;
+    });
+
+    it('re-sends live picks after a reconnect; Esc removes the current turn’s picks', async () => {
+      await fromPage(await pickMsg('l3'));
+      await expect.poll(() => panel.locator('[data-pick-id="3"]').getAttribute('data-status')).toBe('ready');
+      await daemon.waitFor('pick.add', (m) => m.payload.id === 3);
+      const n = pickAdds().filter((m) => m.payload.id === 3).length;
+      await railCommand({ cmd: 'reconnect' });
+      await expect.poll(() => pickAdds().filter((m) => m.payload.id === 3).length).toBe(n + 1);
+
+      await fromPage({ t: 'escape' });
+      expect((await daemon.waitFor('pick.remove', (m) => m.payload.id === 3)).payload).toEqual({ id: 3 });
+      await panel.locator('[data-pick-id="3"]').waitFor({ state: 'detached' });
+      expect((await logOf('pin-remove')).map((e) => e.msg.id)).toContain(3);
+    });
+
+    it('a failed upload still sends pick.add (screenshots null); restore, stale and Clear all work', async () => {
+      daemon.failUploads = true;
+      await fromPage(await pickMsg('l4'));
+      const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 4);
+      expect(add.payload.screenshots).toBeNull();
+      await expect.poll(() => panel.locator('[data-pick-id="4"]').getAttribute('data-status')).toBe('ready');
+      daemon.failUploads = false;
+
+      await fromPage({ t: 'ready', url: appPage.url() });
+      await expect.poll(async () => (await logOf('pins-restore')).length).toBeGreaterThan(0);
+      const restored = (await logOf('pins-restore')).at(-1)?.msg.pins as { id: number }[];
+      expect(restored.map((p) => p.id)).toEqual([4]);
+
+      await fromPage({ t: 'pin-status', id: 4, status: 'stale', rect: null });
+      await panel.locator('[data-pick-id="4"][data-stale="true"]').waitFor();
+
+      await panel.getByRole('button', { name: 'Clear all' }).click();
+      await daemon.waitFor('picks.clear');
+      await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
+      expect((await logOf('pins-clear')).length).toBeGreaterThan(0);
+    });
+
+    it('ignores picks from a tab that is not on the bound origin', async () => {
+      const other = await ctx.newPage();
+      await other.goto('data:text/html,<title>x</title>');
+      await other.bringToFront();
+      const adds = pickAdds().length;
+      await fromPage(await pickMsg('l5'));
+      await sleep(400);
+      expect(pickAdds().length).toBe(adds);
+      await other.close();
+      await appPage.bringToFront();
+      await expect.poll(() => panel.locator('.rail').getAttribute('data-view')).toBe('main');
+    });
   });
 
   it('rebinds on the same socket when the active tab origin changes', async () => {
