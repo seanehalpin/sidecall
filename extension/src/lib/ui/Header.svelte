@@ -59,7 +59,7 @@
   });
 
   // Hanging up mirrors starting: a click now, then a falling close.
-  const HANGUP_GAP_MS = 200;
+  const HANGUP_GAP_MS = 450; // long enough that the click and the close read as two sounds
   function hangUp() {
     pendingSince = null;
     cue('tap');
