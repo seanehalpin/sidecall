@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+  import { Button } from '$lib/components/ui/button';
   import * as PromptInput from '$lib/components/ai-elements/prompt-input';
   import { Suggestion, Suggestions } from '$lib/components/ai-elements/suggestion';
   import { insertAtRange } from '../picks/insert';
@@ -62,29 +63,29 @@
     {#if header}
       <PromptInput.Header>{@render header()}</PromptInput.Header>
     {/if}
-    <PromptInput.Body>
+    <!-- Like Claude's composer: one row, the send button pinned bottom-right inside the box
+         (it rides along as the text grows), and the text keeps clear of it. -->
+    <PromptInput.Body class="relative">
       <PromptInput.Textarea
         bind:ref={field}
         bind:value={text}
         {disabled}
         placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message...'}
         aria-label="Message"
-        class="text-sm"
+        class="pr-12 text-sm"
       />
+      <Button
+        type="submit"
+        variant="ghost"
+        size="icon-sm"
+        class="sc-send absolute right-2 bottom-2"
+        disabled={disabled || text.trim() === ''}
+        aria-label="Send"
+        aria-keyshortcuts="Enter"
+        title="Send (Enter)"
+      >
+        <ArrowUpIcon />
+      </Button>
     </PromptInput.Body>
-    <PromptInput.Toolbar>
-      <PromptInput.Tools class="hint min-w-0 px-2 text-xs text-muted-foreground">
-        <!-- {#if inCall}
-          <span class="call-hint">On a call: just talk, or type here</span>
-        {:else if showPickHint}
-          <span class="pick-hint">⌥-click elements on the page to point at them</span>
-        {:else}
-          <span>Enter to send, Shift+Enter for a new line</span>
-        {/if} -->
-      </PromptInput.Tools>
-      <PromptInput.Submit disabled={disabled || text.trim() === ''}>
-        <ArrowUpIcon class="size-4" />
-      </PromptInput.Submit>
-    </PromptInput.Toolbar>
   </PromptInput.Root>
 </div>

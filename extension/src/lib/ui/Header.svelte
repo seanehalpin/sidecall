@@ -48,52 +48,53 @@
   {/if}
 
   {#if rail.inCall}
-    {#if label}
-      <span
-        class="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
-        data-call-state={rail.callState}
-        data-muted={rail.muted}
-        aria-live="polite"
-      >
+    <!-- Everything a live call adds to the header, grouped for styling (.sc-call in components.css). -->
+    <div class="sc-call flex shrink-0 items-center gap-1" data-call-state={rail.callState} data-muted={rail.muted}>
+      {#if label}
         <span
-          class={cn(
-            'size-1.5 rounded-full bg-muted-foreground',
-            rail.callState === 'listening' && !rail.muted && 'bg-emerald-500',
-            rail.callState === 'listening' && rail.muted && 'bg-destructive',
-            rail.callState === 'thinking' && 'animate-pulse bg-amber-500',
-            rail.callState === 'speaking' && 'animate-pulse bg-primary',
-          )}
-          aria-hidden="true"
-        ></span>{label}
-      </span>
-    {/if}
-    <Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            variant={rail.muted ? 'destructive' : 'ghost'}
-            size="icon-sm"
-            onclick={() => onmute(!rail.muted)}
-            aria-pressed={rail.muted}
-            aria-label={rail.muted ? 'Unmute' : 'Mute'}
-          >
-            {#if rail.muted}<MicOffIcon />{:else}<MicIcon />{/if}
-          </Button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content>{rail.muted ? 'Unmute' : 'Mute'}</Tooltip.Content>
-    </Tooltip.Root>
-    <Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <Button {...props} variant="destructive" size="icon-sm" onclick={onhangup} aria-label="End call">
-            <PhoneOffIcon />
-          </Button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content>End call</Tooltip.Content>
-    </Tooltip.Root>
+          class="sc-call-state inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+          aria-live="polite"
+        >
+          <span
+            class={cn(
+              'size-1.5 rounded-full bg-muted-foreground',
+              rail.callState === 'listening' && !rail.muted && 'bg-emerald-500',
+              rail.callState === 'listening' && rail.muted && 'bg-destructive',
+              rail.callState === 'thinking' && 'animate-pulse bg-amber-500',
+              rail.callState === 'speaking' && 'animate-pulse bg-primary',
+            )}
+            aria-hidden="true"
+          ></span>{label}
+        </span>
+      {/if}
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant={rail.muted ? 'destructive' : 'ghost'}
+              size="icon-sm"
+              onclick={() => onmute(!rail.muted)}
+              aria-pressed={rail.muted}
+              aria-label={rail.muted ? 'Unmute' : 'Mute'}
+            >
+              {#if rail.muted}<MicOffIcon />{:else}<MicIcon />{/if}
+            </Button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{rail.muted ? 'Unmute' : 'Mute'}</Tooltip.Content>
+      </Tooltip.Root>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="destructive" size="icon-sm" onclick={onhangup} aria-label="End call">
+              <PhoneOffIcon />
+            </Button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>End call</Tooltip.Content>
+      </Tooltip.Root>
+    </div>
   {:else}
     <Tooltip.Root>
       <Tooltip.Trigger>

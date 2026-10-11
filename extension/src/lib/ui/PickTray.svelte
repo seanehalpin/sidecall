@@ -28,7 +28,7 @@
 </script>
 
 {#if picks.length > 0}
-  <div class="tray flex w-full items-start gap-2 px-1 pt-1" role="group" aria-label="Picks">
+  <div class="tray flex w-full items-start gap-2 px-1 pt-1 border-b" role="group" aria-label="Picks">
     <div class="chips flex min-w-0 flex-1 flex-wrap gap-1.5">
       {#each picks as chip (chip.id)}
         <Tooltip.Root>

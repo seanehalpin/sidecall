@@ -51,3 +51,11 @@
 	border-color: var(--sc-composer-border);
 	border-radius: var(--sc-composer-radius);
 }
+
+/* The live-call controls in the header: call state, mute and hang up. */
+.sc-call {
+	background: var(--sc-call-bg);
+	border: var(--sc-call-border);
+	border-radius: var(--sc-call-radius);
+	padding: var(--sc-call-padding);
+}

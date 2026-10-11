@@ -28,7 +28,7 @@
   class={cn(
     'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border align-middle',
     'border-[color-mix(in_srgb,var(--studio-inspect)_35%,transparent)] bg-[var(--studio-inspectFill)] text-foreground',
-    size === 'md' ? 'h-7 py-0.5 pr-1.5 pl-0.5 text-xs' : 'h-5 py-0.5 pr-2 pl-0.5 text-[11px]',
+    size === 'md' ? 'h-7 py-0.5 pr-1.5 pl-1.5 text-xs' : 'h-5 py-0.5 pr-2 pl-2 text-[11px]',
     stale && 'border-dashed border-[var(--studio-inspectStale)] bg-transparent text-muted-foreground',
     dimmed && 'opacity-60',
     className,
@@ -39,7 +39,7 @@
     class={cn(
       'num inline-flex shrink-0 items-center justify-center rounded-full font-medium tabular-nums',
       'bg-[var(--studio-inspect)] text-[var(--studio-onInspect)]',
-      size === 'md' ? 'size-6 text-xs' : 'size-4 text-[10px]',
+      size === 'md' ? 'size-5 text-xs' : 'size-4 text-[10px]',
       stale && 'bg-[var(--studio-inspectStale)]',
     )}>{num}</span
   >

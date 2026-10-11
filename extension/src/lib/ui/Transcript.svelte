@@ -73,19 +73,19 @@
         {@const steps = entry.taskId ? (taskSteps[entry.taskId] ?? []) : []}
         {@const hasDetail = !!rest || (t?.files.length ?? 0) > 0 || steps.length > 0}
         <div
-          class={cn('entry system sc-system-line text-xs', /^Task failed/.test(entry.text) && 'failed')}
+          class={cn('entry system sc-system-line text-sm', /^Task failed/.test(entry.text) && 'failed')}
           data-role="system"
           data-turn-id={entry.turnId}
           data-streaming={entry.streaming}
         >
           {#if hasDetail}
             <details class="group">
-              <summary class="flex cursor-pointer list-none items-start gap-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <summary class="flex cursor-pointer list-none items-center p-2 gap-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
                 {#if isTaskOutcome(entry)}<ClaudeMark size={14} class="mt-0.5" />{/if}
                 <span class="min-w-0 flex-1">{head}</span>
                 <ChevronDownIcon class="mt-px size-3.5 shrink-0 transition-transform group-open:rotate-180" />
               </summary>
-              <div class="sc-system-detail mt-2 flex flex-col gap-1.5 border-l-2 pl-3">
+              <div class="sc-system-detail mt-2 flex flex-col gap-3 p-3">
                 {#if rest}<p class="whitespace-pre-wrap text-foreground">{rest}</p>{/if}
                 {#if t && t.files.length > 0}
                   <div class="flex flex-wrap gap-1">
