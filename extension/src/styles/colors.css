@@ -141,7 +141,9 @@
   --sc-call-bg: var(--card);
   --sc-call-border: none;
   --sc-call-radius: 999px;
-  --sc-call-padding: 0;
+  --sc-call-padding: 2px 2px 2px 16px;
+  --sc-call-idle-padding: 2px; /* not on a call: dot + call button */
+  --sc-call-idle-dot-inset: 8px; /* keeps the dot off the rounded edge */
 
   /* Dropdown menus */
   --sc-menu-bg: var(--background); /* same as the panel; the border separates it */

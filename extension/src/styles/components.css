@@ -59,6 +59,13 @@
 	border-radius: var(--sc-call-radius);
 	padding: var(--sc-call-padding);
 }
+/* Same group when not on a call: status dot + call button. */
+.sc-call-idle {
+	padding: var(--sc-call-idle-padding);
+}
+.sc-call-idle > [data-status] {
+	margin-left: var(--sc-call-idle-dot-inset);
+}
 
 /* Dropdown menus (the repo menu and any others): solid, square-ish, neutral hover. */
 [data-slot='dropdown-menu-content'] {

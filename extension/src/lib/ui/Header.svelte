@@ -55,16 +55,12 @@
     </DropdownMenu.Root>
   </div>
 
-  {#if !rail.inCall}
-    <ConnectionDot status={rail.connection} />
-  {/if}
-
   {#if rail.inCall}
     <!-- Everything a live call adds to the header, grouped for styling (.sc-call in components.css). -->
     <div class="sc-call flex shrink-0 items-center gap-1" data-call-state={rail.callState} data-muted={rail.muted}>
       {#if label}
         <span
-          class="sc-call-state inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+          class="sc-call-state inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground pr-2"
           aria-live="polite"
         >
           <span
@@ -108,16 +104,20 @@
       </Tooltip.Root>
     </div>
   {:else}
-    <Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <Button {...props} variant="ghost" size="icon-sm" disabled={!canCall} onclick={oncall} aria-label="Start call">
-            <PhoneIcon />
-          </Button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content>Start a voice call</Tooltip.Content>
-    </Tooltip.Root>
+    <!-- Not on a call: the status dot and the call button, grouped like .sc-call. -->
+    <div class="sc-call sc-call-idle flex shrink-0 items-center gap-1">
+      <ConnectionDot status={rail.connection} />
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="icon-sm" disabled={!canCall} onclick={oncall} aria-label="Start call">
+              <PhoneIcon />
+            </Button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>Start a voice call</Tooltip.Content>
+      </Tooltip.Root>
+    </div>
   {/if}
 
 </header>
