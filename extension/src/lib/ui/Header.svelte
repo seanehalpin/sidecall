@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { play } from 'cuelume';
+  import { play, setTheme } from 'cuelume';
   import MicIcon from '@lucide/svelte/icons/mic';
   import MicOffIcon from '@lucide/svelte/icons/mic-off';
   import PhoneIcon from '@lucide/svelte/icons/phone';
@@ -34,18 +34,39 @@
   const title = $derived(rail.repo ? rail.repo.name : 'Sidecall');
   const subtitle = $derived(rail.repo ? rail.repo.path : (rail.origin ?? 'No local app'));
 
-  // Interaction sounds for the call controls only (cuelume, synthesised with Web Audio).
+  // Interaction sounds for the call controls only (cuelume's "press" theme).
+  setTheme('press');
+  /** Every call sound is subtle. */
+  const cue = (name: Parameters<typeof play>[0], opts: Parameters<typeof play>[1] = {}) =>
+    play(name, { emphasis: 'subtle', ...opts });
+  const OUTCOME_GAP_MS = 400; // the click and the outcome never run together
+
+  // Starting a call: a click now, then success once it's listening, or an error if it fails.
+  let pendingSince: number | null = $state(null);
   function startCall() {
-    play('open');
+    cue('tap');
+    pendingSince = Date.now();
     oncall();
   }
+  function outcome(result: 'success' | 'error') {
+    const wait = Math.max(0, OUTCOME_GAP_MS - (Date.now() - (pendingSince ?? 0)));
+    pendingSince = null;
+    setTimeout(() => cue(result), wait);
+  }
+  $effect(() => {
+    if (pendingSince === null) return;
+    if (rail.callError) outcome('error');
+    else if (rail.callState === 'listening') outcome('success');
+  });
+
   function hangUp() {
-    play('close');
+    pendingSince = null;
+    cue('close');
     onhangup();
   }
   function toggleMute() {
     const muting = !rail.muted;
-    play('toggle', { direction: muting ? 'forward' : 'back' });
+    cue('toggle', { direction: muting ? 'forward' : 'back' });
     onmute(muting);
   }
 </script>
