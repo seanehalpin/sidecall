@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
+  import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import * as PromptInput from '$lib/components/ai-elements/prompt-input';
   import { Suggestion, Suggestions } from '$lib/components/ai-elements/suggestion';
   import { insertAtRange } from '../picks/insert';
@@ -66,22 +67,24 @@
         bind:ref={field}
         bind:value={text}
         {disabled}
-        placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message the agent…'}
+        placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message...'}
         aria-label="Message"
         class="text-sm"
       />
     </PromptInput.Body>
     <PromptInput.Toolbar>
       <PromptInput.Tools class="hint min-w-0 px-2 text-xs text-muted-foreground">
-        {#if inCall}
+        <!-- {#if inCall}
           <span class="call-hint">On a call: just talk, or type here</span>
         {:else if showPickHint}
           <span class="pick-hint">⌥-click elements on the page to point at them</span>
         {:else}
           <span>Enter to send, Shift+Enter for a new line</span>
-        {/if}
+        {/if} -->
       </PromptInput.Tools>
-      <PromptInput.Submit disabled={disabled || text.trim() === ''} />
+      <PromptInput.Submit disabled={disabled || text.trim() === ''}>
+        <ArrowUpIcon class="size-4" />
+      </PromptInput.Submit>
     </PromptInput.Toolbar>
   </PromptInput.Root>
 </div>
