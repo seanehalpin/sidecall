@@ -1,6 +1,6 @@
 <script lang="ts">
   // The ⋯ menu at the bottom-left of the message box: which repo this is, and settings.
-  import EllipsisIcon from '@lucide/svelte/icons/ellipsis-vertical';
+  import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { RailState } from '../rail-state';
