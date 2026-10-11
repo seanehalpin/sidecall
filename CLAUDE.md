@@ -33,6 +33,7 @@ These libraries change quickly. Check their current docs or source before writin
 
 **Extension** (`/extension`)
 - TypeScript strict, WXT, Svelte 5 with runes. pnpm. vitest and Playwright.
+- UI: shadcn-svelte (preset `b3egBd04PK`) with Tailwind v4, plus Svelte AI Elements (https://svelte-ai-elements.vercel.app) for chat parts. Add components with `pnpm dlx shadcn-svelte@latest add <name>` or the AI Elements registry URL; don't hand-style. Screens: `pnpm build && node --experimental-transform-types tests/e2e/ui-screens.mjs` → `.output/screens/`.
 - Generate protocol types from `/protocol`; never hand-edit them.
 
 **Fixtures** (`/fixtures`)
