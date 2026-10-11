@@ -431,6 +431,7 @@ describe('picks in rail state', () => {
     label: 'div.x',
     tooltip: 'src/a.svelte:1:1 (element)',
     component: null,
+    path: 'div.x',
     source: null,
     repeat: null,
     stale: false,
@@ -445,7 +446,7 @@ describe('picks in rail state', () => {
     const s = applyLocalEvent(withPicks(), { kind: 'pickAdd', chip: chip(0 + 2, { label: 'h3' }), origin: null });
     expect(s.picks.map((p) => p.id)).toEqual([1, 2, 3]);
     expect(s.picks[1]?.label).toBe('h3');
-    expect(s.pickHistory[1]).toEqual({ label: 'div.x', tooltip: 'src/a.svelte:1:1 (element)' });
+    expect(s.pickHistory[1]).toEqual({ label: 'div.x', tooltip: 'src/a.svelte:1:1 (element)', path: 'div.x' });
     expect(s.picksOrigin).toBe('http://localhost:5173');
   });
   it('patches status and stale, no-op when unchanged', () => {
@@ -478,5 +479,20 @@ describe('picks in rail state', () => {
     const other = applyServerMessage(withPicks(), w('http://localhost:3000'));
     expect(other.picks).toEqual([]);
     expect(other.pickHistory).toEqual({});
+  });
+});
+
+describe('user messages keep the picks they carried', () => {
+  it('snapshots pick labels so reused numbers do not rename old messages', () => {
+    let s = applyLocalEvent(initialRailState(), {
+      kind: 'pickAdd',
+      chip: { id: 1, kind: 'element', label: 'h2', tooltip: 'Card.svelte:8', component: 'Card', path: 'CardList › Card › h2', source: null, repeat: null, stale: false, dimmed: false, status: 'ready' },
+      origin: 'http://localhost:5173',
+    });
+    s = applyServerMessage(s, {
+      type: 'transcript.final', id: 'm', ts: 1,
+      payload: { turnId: 'u1', role: 'user', text: 'make this green', pickIds: [1], taskId: null },
+    } as never);
+    expect(s.transcript.at(-1)?.picks).toEqual([{ id: 1, label: 'Card', path: 'CardList › Card › h2', tooltip: 'Card.svelte:8' }]);
   });
 });

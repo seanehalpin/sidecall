@@ -40,12 +40,26 @@ export function buildChip(id: number, draft: PickDraft): PickChip {
     label: component ? `${base} · ${component}` : base,
     tooltip,
     component,
+    path: chipPath(draft, base),
     source: source ? { file: source.file, line: source.line, precision: source.precision } : null,
     repeat: draft.repeat,
     stale: false,
     dimmed: false,
     status: 'capturing',
   };
+}
+
+/**
+ * "CardList › Card › h2.card-title": up to two enclosing components (outermost first,
+ * skipping Svelte blocks like {#each}) and then the element itself.
+ */
+export function chipPath(draft: PickDraft, base: string): string {
+  const names = draft.framework.componentChain
+    .map((c) => c.name)
+    .filter((n) => n && !n.startsWith('{'))
+    .slice(0, 2)
+    .reverse();
+  return [...names, base].join(' › ');
 }
 
 function regionLabel(draft: PickDraft): string {

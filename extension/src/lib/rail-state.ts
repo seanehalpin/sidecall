@@ -26,6 +26,9 @@ export interface TranscriptItem {
   taskId: string | null;
   /** True while an agent reply is still streaming (agent.text.delta). */
   streaming: boolean;
+  /** The picks a user message carried, as they were when it arrived. Pick numbers restart
+   *  at [1] once the tray empties, so the live history can't name old messages' picks. */
+  picks?: { id: number; label: string; path: string; tooltip: string }[];
 }
 
 /** One worker step (task.event), shown as an item of the task in the transcript. */
@@ -45,6 +48,8 @@ export interface RailError {
 export interface PickHistoryEntry {
   label: string;
   tooltip: string;
+  /** Breadcrumb ("CardList › Card › h2.card-title"); missing in state saved before it existed. */
+  path?: string;
 }
 
 export const PICK_HISTORY_LIMIT = 200;
@@ -253,6 +258,12 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
         taskId: p.taskId,
         streaming: false,
       };
+      if (p.role === 'user' && p.pickIds.length > 0) {
+        item.picks = p.pickIds.flatMap((id) => {
+          const h = state.pickHistory[id];
+          return h ? [{ id, label: h.label, path: h.path ?? h.label, tooltip: h.tooltip }] : [];
+        });
+      }
       const i = state.transcript.findIndex((e) => e.turnId === p.turnId && e.role === p.role);
       let transcript: TranscriptItem[];
       if (i === -1) {
@@ -397,7 +408,7 @@ export function applyLocalEvent(state: RailState, ev: LocalEvent): RailState {
       return state.callError ? { ...state, callError: null } : state;
     case 'pickAdd': {
       const picks = [...state.picks.filter((p) => p.id !== ev.chip.id), ev.chip].sort((a, b) => a.id - b.id);
-      const pickHistory = { ...state.pickHistory, [ev.chip.id]: { label: chipTitle(ev.chip), tooltip: ev.chip.tooltip } };
+      const pickHistory = { ...state.pickHistory, [ev.chip.id]: { label: chipTitle(ev.chip), tooltip: ev.chip.tooltip, path: ev.chip.path } };
       const ids = Object.keys(pickHistory).map(Number);
       if (ids.length > PICK_HISTORY_LIMIT) {
         ids.sort((a, b) => a - b);

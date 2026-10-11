@@ -116,8 +116,10 @@ export interface PickChip {
   label: string;
   /** Tooltip: "src/lib/Card.svelte:14:3 (element) · repeated 12×, instance 3". */
   tooltip: string;
-  /** Component name, if known (chip shows it first). */
+  /** Component name, if known. */
   component: string | null;
+  /** Breadcrumb shown on the chip: "CardList › Card › h2.card-title". */
+  path: string;
   source: { file: string; line: number; precision: 'element' | 'component' } | null;
   repeat: Repeat | null;
   stale: boolean;

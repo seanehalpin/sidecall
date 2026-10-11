@@ -23,7 +23,7 @@
 /* --- Side panel: light ------------------------------------------------------------ */
 :root {
 	/* Text size the whole panel scales from. 16px gives 14px body text. */
-	--sidecall-root-font-size: 16px;
+	--sidecall-root-font-size: 14px;
 
 	--background: oklch(1 0 0); /* panel background */
 	--foreground: oklch(0.148 0.004 228.8); /* main text */

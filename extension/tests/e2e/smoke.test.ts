@@ -271,6 +271,11 @@ describe('extension smoke', () => {
       };
     }
     const pickAdds = () => daemon.of('pick.add');
+    /** The next pick.add / pick.remove after `before` messages (ids restart at 1 once the tray empties). */
+    const nextOf = async <T extends 'pick.add' | 'pick.remove'>(type: T, before: number) => {
+      await expect.poll(() => daemon.of(type).length).toBeGreaterThan(before);
+      return daemon.of(type).at(-1)!;
+    };
 
     it('stores the daemon clock offset from welcome', async () => {
       daemon.clockOffset = 60_000;
@@ -280,14 +285,14 @@ describe('extension smoke', () => {
     });
 
     it('a pick shows a chip, uploads crop + viewport and sends pick.add', async () => {
-      await panel.getByText('⌥-click elements on the page, then refer to them as [1], [2]').waitFor();
+      await panel.getByText('⌥-click elements on the page to point at them').waitFor();
       const before = Date.now();
       await fromPage(await pickMsg('l1'));
-      const chip = panel.locator('[data-pick-id="1"]');
+      const chip = panel.locator('.tray [data-pick-id="1"]');
       await chip.waitFor();
       await expect.poll(() => chip.getAttribute('data-status')).toBe('ready');
-      await chip.getByText('[1]').waitFor();
-      await chip.getByText('Page', { exact: true }).waitFor();
+      expect(await chip.locator('.num').innerText()).toBe('1');
+      expect(await chip.locator('.label').innerText()).toContain('Page');
       expect(await chip.getAttribute('data-tip')).toContain('src/routes/+page.svelte:3:1 (element) · repeated 4×, instance 2');
 
       const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 1);
@@ -316,21 +321,20 @@ describe('extension smoke', () => {
       await panel.getByText('⌥-click elements on the page').waitFor({ state: 'detached' });
     });
 
-    it('tray hover highlights the pin; clicking a chip inserts [n] at the cursor', async () => {
+    it('tray hover highlights the pin; clicking a chip does not type into the message', async () => {
       await fromPage(await pickMsg('l2'));
-      await expect.poll(() => panel.locator('[data-pick-id="2"]').getAttribute('data-status')).toBe('ready');
-      await panel.locator('[data-pick-id="1"]').hover();
+      await expect.poll(() => panel.locator('.tray [data-pick-id="2"]').getAttribute('data-status')).toBe('ready');
+      await panel.locator('.tray [data-pick-id="1"]').hover();
       await expect.poll(async () => (await logOf('pin-highlight')).at(-1)?.msg.id).toBe(1);
       await panel.mouse.move(5, 5);
       await expect.poll(async () => (await logOf('pin-highlight')).at(-1)?.msg.id).toBeNull();
 
       const composer = panel.getByLabel('Message');
-      await composer.fill('make  match');
-      await composer.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(5, 5));
-      await panel.locator('[data-pick-id="2"] button.main').click();
-      expect(await composer.inputValue()).toBe('make [2] match');
-      await panel.locator('[data-pick-id="1"] button.main').click();
-      expect(await composer.inputValue()).toBe('make [2] [1] match');
+      await composer.fill('make it match');
+      await panel.locator('.tray [data-pick-id="2"] .label').click();
+      // Picks ride along with the message; they're never typed into it.
+      expect(await composer.inputValue()).toBe('make it match');
+      await composer.fill('');
     });
 
     it('typing [1] and [2] sends pickIds, dims both, and task.created consumes them', async () => {
@@ -345,13 +349,16 @@ describe('extension smoke', () => {
       const ut = await daemon.waitFor('user.text', (m) => m.payload.text === 'make [1] match [2]');
       expect(ut.payload.pickIds).toEqual([1, 2]);
       await expect.poll(async () => (await logOf('pin-dim')).at(-1)?.msg.ids).toEqual([1, 2]);
-      // The transcript renders [n] as pills with the stored tooltip; text is unchanged.
-      const bubble = panel.locator('[data-role="user"]', { hasText: 'make [1] match [2]' }).last();
+      // The transcript renders typed [n] as numbered pills with the stored tooltip, and lists
+      // the picks the message carried as chips under it.
+      const bubble = panel.locator('.entry.user[data-turn-id="u9"]');
+      await bubble.waitFor();
       expect(await bubble.locator('.marker').count()).toBe(2);
       expect(await bubble.locator('.marker').first().getAttribute('data-tip')).toContain('src/routes/+page.svelte:3:1');
-      expect((await bubble.innerText()).trim()).toBe('make [1] match [2]');
+      expect(await bubble.locator('.marker').first().innerText()).toBe('1');
+      expect(await bubble.locator('.pick').count()).toBe(2);
       // task.created with pickIds consumed them.
-      await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
+      await panel.locator('.tray [data-pick-id]').first().waitFor({ state: 'detached' });
       const removed = (await logOf('pin-remove')).map((e) => e.msg.id);
       expect(removed).toEqual(expect.arrayContaining([1, 2]));
       await expect.poll(async () => (await sw.evaluate(() => chrome.storage.session.get('pickStore'))).pickStore).toEqual({});
@@ -359,51 +366,60 @@ describe('extension smoke', () => {
     });
 
     it('re-sends live picks after a reconnect; Esc removes the current turn’s picks', async () => {
+      const addsBefore = pickAdds().length;
       await fromPage(await pickMsg('l3'));
-      await expect.poll(() => panel.locator('[data-pick-id="3"]').getAttribute('data-status')).toBe('ready');
-      await daemon.waitFor('pick.add', (m) => m.payload.id === 3);
-      const n = pickAdds().filter((m) => m.payload.id === 3).length;
+      // The previous test's picks were consumed, so numbering is back at [1].
+      expect((await nextOf('pick.add', addsBefore)).payload.id).toBe(1);
+      await expect.poll(() => panel.locator('.tray [data-pick-id="1"]').getAttribute('data-status')).toBe('ready');
+      const n = pickAdds().filter((m) => m.payload.id === 1).length;
       await railCommand({ cmd: 'reconnect' });
-      await expect.poll(() => pickAdds().filter((m) => m.payload.id === 3).length).toBe(n + 1);
+      await expect.poll(() => pickAdds().filter((m) => m.payload.id === 1).length).toBe(n + 1);
 
+      const removesBefore = daemon.of('pick.remove').length;
       await fromPage({ t: 'escape' });
-      expect((await daemon.waitFor('pick.remove', (m) => m.payload.id === 3)).payload).toEqual({ id: 3 });
-      await panel.locator('[data-pick-id="3"]').waitFor({ state: 'detached' });
-      expect((await logOf('pin-remove')).map((e) => e.msg.id)).toContain(3);
+      expect((await nextOf('pick.remove', removesBefore)).payload).toEqual({ id: 1 });
+      await panel.locator('.tray [data-pick-id="1"]').waitFor({ state: 'detached' });
+      expect((await logOf('pin-remove')).map((e) => e.msg.id)).toContain(1);
     });
 
     it('a failed upload still sends pick.add (screenshots null); restore, stale and Clear all work', async () => {
       daemon.failUploads = true;
+      const addsBefore = pickAdds().length;
       await fromPage(await pickMsg('l4'));
-      const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 4);
+      const add = await nextOf('pick.add', addsBefore);
+      expect(add.payload.id).toBe(1);
       expect(add.payload.screenshots).toBeNull();
-      await expect.poll(() => panel.locator('[data-pick-id="4"]').getAttribute('data-status')).toBe('ready');
+      await expect.poll(() => panel.locator('.tray [data-pick-id="1"]').getAttribute('data-status')).toBe('ready');
       daemon.failUploads = false;
 
       await fromPage({ t: 'ready', url: appPage.url() });
       await expect.poll(async () => (await logOf('pins-restore')).length).toBeGreaterThan(0);
       const restored = (await logOf('pins-restore')).at(-1)?.msg.pins as { id: number }[];
-      expect(restored.map((p) => p.id)).toEqual([4]);
+      expect(restored.map((p) => p.id)).toEqual([1]);
 
-      await fromPage({ t: 'pin-status', id: 4, status: 'stale', rect: null });
-      await panel.locator('[data-pick-id="4"][data-stale="true"]').waitFor();
+      await fromPage({ t: 'pin-status', id: 1, status: 'stale', rect: null });
+      await panel.locator('.tray [data-pick-id="1"][data-stale="true"]').waitFor();
 
       await panel.getByRole('button', { name: 'Clear all' }).click();
       await daemon.waitFor('picks.clear');
-      await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
+      await panel.locator('.tray [data-pick-id]').first().waitFor({ state: 'detached' });
       expect((await logOf('pins-clear')).length).toBeGreaterThan(0);
     });
 
     it('a voice transcript.final with pickIds dims those picks', async () => {
+      const addsBefore = pickAdds().length;
       await fromPage(await pickMsg('l3'));
-      const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 5);
+      const add = await nextOf('pick.add', addsBefore);
+      expect(add.payload.id).toBe(1);
       expect(add.payload.createdAt).toBeGreaterThan(Date.now() + 30_000); // daemon clock
-      await expect.poll(() => panel.locator('[data-pick-id="5"]').getAttribute('data-status')).toBe('ready');
-      daemon.broadcast(serverMsg('transcript.final', { turnId: 'v1', role: 'user', text: 'make this blue', pickIds: [5], taskId: null }));
-      await expect.poll(async () => (await logOf('pin-dim')).at(-1)?.msg.ids).toEqual([5]);
-      await panel.locator('[data-pick-id="5"][data-dimmed="true"]').waitFor();
+      await expect.poll(() => panel.locator('.tray [data-pick-id="1"]').getAttribute('data-status')).toBe('ready');
+      daemon.broadcast(serverMsg('transcript.final', { turnId: 'v1', role: 'user', text: 'make this blue', pickIds: [1], taskId: null }));
+      await expect.poll(async () => (await logOf('pin-dim')).at(-1)?.msg.ids).toEqual([1]);
+      await panel.locator('.tray [data-pick-id="1"][data-dimmed="true"]').waitFor();
+      // The sent message shows the pick it carried.
+      await panel.locator('.entry.user[data-turn-id="v1"] .pick[data-pick-id="1"]').waitFor();
       await panel.getByRole('button', { name: 'Clear all' }).click();
-      await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
+      await panel.locator('.tray [data-pick-id]').first().waitFor({ state: 'detached' });
     });
 
     it('ignores picks from a tab that is not on the bound origin', async () => {

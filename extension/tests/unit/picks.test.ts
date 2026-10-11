@@ -57,6 +57,7 @@ describe('selectPickIds', () => {
 describe('ids and clock', () => {
   it('never reuses ids', () => {
     expect(nextPickId(0, [])).toBe(1);
+    expect(nextPickId(5, [])).toBe(1); // cleared: start again at [1]
     expect(nextPickId(5, [2])).toBe(6);
     expect(nextPickId(0, [3, 7])).toBe(8);
   });

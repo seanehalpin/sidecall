@@ -19,6 +19,8 @@ export function selectPickIds(live: readonly { id: number; dimmed: boolean }[], 
  * service-worker restart that lost the counter can never reuse an id.
  */
 export function nextPickId(counter: number, liveIds: readonly number[]): number {
+  // Back to none selected: numbering starts again at [1].
+  if (liveIds.length === 0) return 1;
   return Math.max(counter, 0, ...liveIds) + 1;
 }
 

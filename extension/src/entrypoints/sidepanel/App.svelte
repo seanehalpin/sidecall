@@ -148,6 +148,7 @@
         bind:this={composer}
         disabled={!sendable}
         showPickHint={view === 'main' && rail.picks.length === 0}
+        pickedName={view === 'main' ? (rail.picks.find((p) => !p.dimmed)?.component ?? null) : null}
         inCall={rail.inCall}
         suggestions={showSuggestions ? SUGGESTIONS : []}
         header={view === 'main' && rail.picks.length > 0 ? pickTray : undefined}
@@ -161,7 +162,6 @@
   <PickTray
     picks={rail.picks}
     onhover={(id) => client.command({ cmd: 'pickHighlight', id })}
-    oninsert={(id) => void composer?.insertAtCursor(`[${id}]`)}
     onremove={(id) => client.command({ cmd: 'pickRemove', id })}
     onclear={() => client.command({ cmd: 'picksClear' })}
   />

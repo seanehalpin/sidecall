@@ -8,6 +8,7 @@
     disabled,
     showPickHint = false,
     inCall = false,
+    pickedName = null,
     suggestions = [],
     header,
     onsend,
@@ -15,6 +16,8 @@
     disabled: boolean;
     showPickHint?: boolean;
     inCall?: boolean;
+    /** Component of the first live pick: the placeholder becomes "Change Card…". */
+    pickedName?: string | null;
     /** Starter prompts shown above the input (an empty conversation). */
     suggestions?: string[];
     /** Rendered in the PromptInput header (the pick chips). */
@@ -63,7 +66,7 @@
         bind:ref={field}
         bind:value={text}
         {disabled}
-        placeholder={disabled ? 'Connect to a repo to start' : 'Message the agent…'}
+        placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message the agent…'}
         aria-label="Message"
       />
     </PromptInput.Body>
@@ -72,7 +75,7 @@
         {#if inCall}
           <span class="call-hint">On a call: just talk, or type here</span>
         {:else if showPickHint}
-          <span class="pick-hint">⌥-click elements on the page, then refer to them as [1], [2]</span>
+          <span class="pick-hint">⌥-click elements on the page to point at them</span>
         {:else}
           <span>Enter to send, Shift+Enter for a new line</span>
         {/if}

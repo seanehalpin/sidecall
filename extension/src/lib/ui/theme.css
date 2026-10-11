@@ -70,7 +70,7 @@
 
 /* Chrome's injected extension-page defaults set body to 75%; override them. */
 html {
-	font-size: var(--sidecall-root-font-size, 16px);
+	font-size: var(--sidecall-root-font-size, 14px);
 }
 
 html,
