@@ -68,6 +68,7 @@
         {disabled}
         placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message the agent…'}
         aria-label="Message"
+        class="text-sm"
       />
     </PromptInput.Body>
     <PromptInput.Toolbar>
