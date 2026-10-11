@@ -101,6 +101,10 @@ try {
   await panel.locator('.rail[data-view="main"]').waitFor();
   await sleep(300);
   await shot(panel, '04-main-empty');
+  await panel.getByRole('button', { name: 'Repo menu' }).click();
+  await panel.locator('[data-slot="dropdown-menu-content"]').waitFor();
+  await shot(panel, '04b-repo-menu');
+  await panel.keyboard.press('Escape');
 
   // 4. Picks, then a conversation that refers to them.
   const anchor = { tag: 'h1', source: null, selector: 'h1', altSelectors: [], textFingerprint: 'home', repeatIndex: null, region: null };

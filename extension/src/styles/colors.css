@@ -138,10 +138,19 @@
   --sc-claude-mark: #d97757; /* the pixel critter */
 
   /* Live-call controls in the header (call state, mute, hang up) */
-  --sc-call-bg: transparent;
+  --sc-call-bg: var(--card);
   --sc-call-border: none;
   --sc-call-radius: 999px;
   --sc-call-padding: 0;
+
+  /* Dropdown menus */
+  --sc-menu-bg: var(--background); /* same as the panel; the border separates it */
+  --sc-menu-fg: var(--foreground);
+  --sc-menu-border: var(--border);
+  --sc-menu-radius: 8px;
+  --sc-menu-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+  --sc-menu-item-radius: 4px;
+  --sc-menu-item-hover-bg: var(--muted);
 
   /* Approval cards and composer */
   --sc-approval-bg: var(--card);

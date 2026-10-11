@@ -28,7 +28,7 @@
 </script>
 
 {#if picks.length > 0}
-  <div class="tray flex w-full items-start gap-2 px-1 pt-1 border-b" role="group" aria-label="Picks">
+  <div class="tray flex w-full items-start gap-2 px-1 pt-1 py-2 border-b" role="group" aria-label="Picks">
     <div class="chips flex min-w-0 flex-1 flex-wrap gap-1.5">
       {#each picks as chip (chip.id)}
         <Tooltip.Root>
@@ -54,7 +54,7 @@
                     <Loader2Icon class="spinner size-3 shrink-0 animate-spin text-muted-foreground" role="status" aria-label="Capturing screenshot" />
                   {/if}
                   <button
-                    class="x inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-[var(--studio-inspectFill)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    class="x inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-[var(--studio-inspectFill)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     type="button"
                     onclick={() => onremove(chip.id)}
                     aria-label={`Remove [${chip.id}]`}

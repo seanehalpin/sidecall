@@ -59,3 +59,28 @@
 	border-radius: var(--sc-call-radius);
 	padding: var(--sc-call-padding);
 }
+
+/* Dropdown menus (the repo menu and any others): solid, square-ish, neutral hover. */
+[data-slot='dropdown-menu-content'] {
+	background: var(--sc-menu-bg);
+	color: var(--sc-menu-fg);
+	border: 1px solid var(--sc-menu-border);
+	border-radius: var(--sc-menu-radius);
+	box-shadow: var(--sc-menu-shadow);
+	backdrop-filter: none;
+	--tw-ring-shadow: 0 0 #0000; /* drop the preset's ring */
+	padding: 4px;
+}
+[data-slot='dropdown-menu-item'] {
+	border-radius: var(--sc-menu-item-radius);
+	padding: 6px 8px;
+}
+[data-slot='dropdown-menu-item']:focus,
+[data-slot='dropdown-menu-item'][data-highlighted] {
+	background: var(--sc-menu-item-hover-bg);
+	color: var(--sc-menu-fg);
+}
+[data-slot='dropdown-menu-item']:focus *,
+[data-slot='dropdown-menu-item'][data-highlighted] * {
+	color: inherit;
+}
