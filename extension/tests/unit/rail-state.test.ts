@@ -9,6 +9,7 @@ import {
   initialRailState,
   railView,
   reorderIds,
+  TASK_STEPS_LIMIT,
   TRANSCRIPT_LIMIT,
   type RailState,
 } from '../../src/lib/rail-state';
@@ -251,6 +252,24 @@ describe('tasks', () => {
     s = apply(s, msg('queue.state', { tasks: [task('t1', { status: 'running' }), task('t2'), task('t3', { lastEvent: 'from daemon' })] }));
     expect(s.tasks.map((t) => t.id)).toEqual(['t1', 't2', 't3']);
     expect(s.lastTaskEvent).toEqual({ t1: 'reading files', t3: 'from daemon' });
+    expect(s.taskSteps).toEqual({ t1: [{ kind: 'tool', text: 'reading files' }], t3: [{ kind: 'status', text: 'from daemon' }] });
+  });
+
+  it('task.event keeps a capped step history without consecutive duplicates', () => {
+    let s = apply(bound(), msg('task.created', task('t1', { status: 'running' })));
+    s = apply(
+      s,
+      msg('task.event', { taskId: 't1', kind: 'status', text: 'reading files' }),
+      msg('task.event', { taskId: 't1', kind: 'tool', text: 'reading files' }),
+      msg('task.event', { taskId: 't1', kind: 'edit', text: 'editing a.svelte' }),
+    );
+    expect(s.taskSteps.t1).toEqual([
+      { kind: 'tool', text: 'reading files' },
+      { kind: 'edit', text: 'editing a.svelte' },
+    ]);
+    for (let i = 0; i < TASK_STEPS_LIMIT + 5; i++) s = apply(s, msg('task.event', { taskId: 't1', kind: 'text', text: `step ${i}` }));
+    expect(s.taskSteps.t1).toHaveLength(TASK_STEPS_LIMIT);
+    expect(s.taskSteps.t1?.at(-1)?.text).toBe(`step ${TASK_STEPS_LIMIT + 4}`);
   });
 });
 

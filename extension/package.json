@@ -39,9 +39,16 @@
     "wxt": "^0.21.4"
   },
   "dependencies": {
+    "@shikijs/langs": "^4.5.0",
+    "@shikijs/themes": "^4.5.0",
+    "ai": "^6.0.302",
     "bippy": "0.7.3",
+    "dompurify": "^3.4.16",
+    "mode-watcher": "^1.1.0",
     "runed": "^0.37.1",
+    "shiki": "^4.5.0",
     "source-map-js": "1.2.2",
+    "streamdown-svelte": "^3.0.6",
     "svelte-toolbelt": "^0.10.6"
   }
 }

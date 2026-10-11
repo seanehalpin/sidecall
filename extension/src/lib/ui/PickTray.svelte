@@ -31,19 +31,16 @@
 </script>
 
 {#if picks.length > 0}
-  <div class="tray flex flex-none items-start gap-2 border-t bg-card px-3 py-2" role="group" aria-label="Picks">
-    <div class="chips flex min-w-0 flex-1 flex-wrap gap-1.5">
+  <div class="tray flex w-full items-start gap-2" role="group" aria-label="Picks">
+    <div class="chips flex min-w-0 flex-1 flex-wrap gap-1">
       {#each picks as chip (chip.id)}
         <Tooltip.Root>
           <Tooltip.Trigger>
             {#snippet child({ props })}
-              <div
+              <Badge
                 {...props}
-                class={cn(
-                  'chip inline-flex max-w-full items-center overflow-hidden rounded-4xl border bg-muted/60 text-xs',
-                  chip.dimmed && 'dimmed opacity-55',
-                  chip.stale && 'stale border-amber-500/50 bg-amber-500/10',
-                )}
+                variant={chip.stale ? 'destructive' : 'secondary'}
+                class={cn('chip h-6 max-w-full gap-0 p-0', chip.dimmed && 'dimmed opacity-50', chip.stale && 'stale')}
                 data-pick-id={chip.id}
                 data-status={chip.status}
                 data-dimmed={chip.dimmed}
@@ -54,27 +51,27 @@
                 onmouseleave={() => onhover(null)}
               >
                 <button
-                  class="main inline-flex min-w-0 cursor-pointer items-center gap-1.5 py-1 pr-1 pl-2.5 outline-none focus-visible:underline"
+                  class="main inline-flex h-full min-w-0 cursor-pointer items-center gap-1 pr-1 pl-2 outline-none focus-visible:underline"
                   type="button"
                   onclick={() => oninsert(chip.id)}
                   aria-label={`Insert [${chip.id}]`}
                 >
-                  <span class="num font-mono font-semibold text-primary">[{chip.id}]</span>
-                  <span class="label max-w-[14em] truncate">{chipTitle(chip)}</span>
+                  <span class="num font-mono">[{chip.id}]</span>
+                  <span class="label max-w-[14em] truncate font-normal">{chipTitle(chip)}</span>
                   {#if chip.status === 'capturing' || chip.status === 'uploading'}
-                    <Loader2Icon class="spinner size-3 animate-spin text-muted-foreground" role="status" aria-label="Capturing screenshot" />
+                    <Loader2Icon class="spinner size-3 animate-spin" role="status" aria-label="Capturing screenshot" />
                   {/if}
-                  {#if chip.stale}<Badge variant="destructive" class="h-4 px-1.5 text-[10px] uppercase">stale</Badge>{/if}
+                  {#if chip.stale}<span class="font-normal">· stale</span>{/if}
                 </button>
                 <button
-                  class="x flex cursor-pointer items-center py-1 pr-2 pl-1 text-muted-foreground outline-none hover:text-foreground"
+                  class="x flex h-full cursor-pointer items-center pr-2 pl-0.5 opacity-60 outline-none hover:opacity-100"
                   type="button"
                   onclick={() => onremove(chip.id)}
                   aria-label={`Remove [${chip.id}]`}
                 >
                   <XIcon class="size-3" />
                 </button>
-              </div>
+              </Badge>
             {/snippet}
           </Tooltip.Trigger>
           <Tooltip.Content class="whitespace-pre-line">{tooltip(chip)}</Tooltip.Content>

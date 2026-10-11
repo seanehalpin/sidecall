@@ -23,7 +23,7 @@
 </script>
 
 <ScrollArea bind:ref class={cn("mt-2 -mb-1", className)} {...restProps}>
-	<div class="max-h-56 pr-4">
+	<div class="max-h-40 pr-4">
 		<ul>{@render children?.()}</ul>
 	</div>
 </ScrollArea>

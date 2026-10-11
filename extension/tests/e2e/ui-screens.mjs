@@ -136,10 +136,10 @@ try {
   await fromPage(await pickMsg('l2', 'Sidebar', 'src/lib/Sidebar.svelte', 8));
   await ready(2);
 
-  const say = (turnId, role, text) => daemon.broadcast(serverMsg('transcript.final', { turnId, role, text, pickIds: [], taskId: null }));
+  const say = (turnId, role, text, taskId = null) => daemon.broadcast(serverMsg('transcript.final', { turnId, role, text, pickIds: [], taskId }));
   say('u1', 'user', 'make [1] match the spacing of [2]');
   say('a1', 'agent', 'Sure. I will tighten the padding on the product card so it lines up with the sidebar.');
-  say('s1', 'system', 'Task queued: Align card spacing');
+  say('s1', 'system', 'Task queued: Align card spacing', 't1');
   say('u2', 'user', 'and use the same border colour');
   daemon.broadcast(serverMsg('agent.text.delta', { turnId: 'a2', delta: 'Got it, I will reuse the sidebar border token' }));
   await panel.locator('[data-role="agent"][data-streaming="true"]').waitFor();
@@ -147,7 +147,7 @@ try {
   await shot(panel, '05-conversation');
 
   // 5. Task queue: running, queued, done (and a failed one).
-  const running = task('t1', 'Align card spacing', { status: 'running', lastEvent: 'editing src/lib/ProductCard.svelte' });
+  const running = task('t1', 'Align card spacing', { status: 'running', lastEvent: 'Reading src/lib/Sidebar.svelte' });
   daemon.broadcast(
     serverMsg('queue.state', {
       tasks: [
@@ -159,6 +159,7 @@ try {
       ],
     }),
   );
+  daemon.broadcast(serverMsg('task.event', { taskId: 't1', kind: 'tool', text: 'Reading src/lib/Sidebar.svelte' }));
   daemon.broadcast(serverMsg('task.event', { taskId: 't1', kind: 'edit', text: 'editing src/lib/ProductCard.svelte' }));
   await panel.locator('[data-task-id="t1"]').waitFor();
   await sleep(300);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ModeWatcher } from 'mode-watcher';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
@@ -84,6 +85,7 @@
   }
 </script>
 
+<ModeWatcher disableHeadScriptInjection />
 <Tooltip.Provider>
 <main class="mx-auto flex min-h-full max-w-xl flex-col gap-4 bg-background px-4 py-8 text-foreground">
   <h1 class="m-0 font-heading text-xl font-semibold">Sidecall settings</h1>

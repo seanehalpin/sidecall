@@ -2,7 +2,7 @@
 	import { cn } from "$lib/utils";
 	import type { Snippet } from "svelte";
 	import type { HTMLAttributes } from "svelte/elements";
-	import type { MessageRole } from "./types";
+	import type { MessageRole } from "../context/message-context.svelte.js";
 
 	interface Props extends HTMLAttributes<HTMLDivElement> {
 		from: MessageRole;

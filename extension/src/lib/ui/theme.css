@@ -4,6 +4,9 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist";
 
+/* Message responses render through streamdown-svelte; Tailwind skips node_modules, so scan it. */
+@source "../../../node_modules/streamdown-svelte/dist/**/*.{js,svelte,ts}";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

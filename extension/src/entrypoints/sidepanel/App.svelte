@@ -4,6 +4,7 @@
   import MonitorOffIcon from '@lucide/svelte/icons/monitor-off';
   import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
   import XIcon from '@lucide/svelte/icons/x';
+  import { ModeWatcher } from 'mode-watcher';
   import { browser } from 'wxt/browser';
   import { Alert } from '$lib/components/ui/alert';
   import { Button } from '$lib/components/ui/button';
@@ -34,11 +35,15 @@
 
   let composer: Composer | undefined = $state();
 
+  const SUGGESTIONS = ['Make the heading bigger', "What's on this page?", 'Tidy up the spacing'];
+  const showSuggestions = $derived(view === 'main' && rail.transcript.length === 0 && !rail.partial);
+
   function openSettings() {
     void browser.runtime.openOptionsPage();
   }
 </script>
 
+<ModeWatcher disableHeadScriptInjection />
 <Tooltip.Provider delayDuration={300}>
   <div class="rail flex h-screen flex-col bg-background text-foreground" data-view={view}>
     <Header
@@ -51,11 +56,6 @@
     />
 
     {#if view === 'main'}
-      <Approvals
-        approvals={rail.approvals}
-        disabled={!sendable}
-        onrespond={(id, allow) => client.send({ type: 'approval.respond', payload: { id, allow } })}
-      />
       {#if rail.callError}
         <Alert variant="destructive" class="banner m-3 mb-0 flex w-auto items-center justify-between gap-2 py-2" data-call-error={rail.callError.code}>
           <span class="flex items-center gap-2 text-xs"><CircleAlertIcon class="size-4 shrink-0" />{rail.callError.message}</span>
@@ -76,25 +76,12 @@
       <Transcript
         entries={rail.transcript}
         partial={rail.partial}
+        tasks={rail.tasks}
+        taskSteps={rail.taskSteps}
         picks={rail.picks}
         pickHistory={rail.pickHistory}
         {thinking}
         onhighlight={(id) => client.command({ cmd: 'pickHighlight', id })}
-        onsuggest={(text) => void composer?.insertAtCursor(text)}
-      />
-      <TaskQueue
-        tasks={rail.tasks}
-        lastTaskEvent={rail.lastTaskEvent}
-        disabled={!sendable}
-        oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
-        onreorder={(ids) => client.send({ type: 'task.reorder', payload: { ids } })}
-      />
-      <PickTray
-        picks={rail.picks}
-        onhover={(id) => client.command({ cmd: 'pickHighlight', id })}
-        oninsert={(id) => void composer?.insertAtCursor(`[${id}]`)}
-        onremove={(id) => client.command({ cmd: 'pickRemove', id })}
-        onclear={() => client.command({ cmd: 'picksClear' })}
       />
     {:else}
       <div class="blocking flex-1 overflow-y-auto p-4">
@@ -142,12 +129,40 @@
       </div>
     {/if}
 
-    <Composer
-      bind:this={composer}
-      disabled={!sendable}
-      showPickHint={view === 'main' && rail.picks.length === 0}
-      inCall={rail.inCall}
-      onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
-    />
+    <div class="flex flex-none flex-col gap-2 p-3">
+      {#if view === 'main'}
+        <Approvals
+          approvals={rail.approvals}
+          disabled={!sendable}
+          onrespond={(id, allow) => client.send({ type: 'approval.respond', payload: { id, allow } })}
+        />
+        <TaskQueue
+          tasks={rail.tasks}
+          lastTaskEvent={rail.lastTaskEvent}
+          disabled={!sendable}
+          oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
+          onreorder={(ids) => client.send({ type: 'task.reorder', payload: { ids } })}
+        />
+      {/if}
+      <Composer
+        bind:this={composer}
+        disabled={!sendable}
+        showPickHint={view === 'main' && rail.picks.length === 0}
+        inCall={rail.inCall}
+        suggestions={showSuggestions ? SUGGESTIONS : []}
+        header={view === 'main' && rail.picks.length > 0 ? pickTray : undefined}
+        onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
+      />
+    </div>
   </div>
 </Tooltip.Provider>
+
+{#snippet pickTray()}
+  <PickTray
+    picks={rail.picks}
+    onhover={(id) => client.command({ cmd: 'pickHighlight', id })}
+    oninsert={(id) => void composer?.insertAtCursor(`[${id}]`)}
+    onremove={(id) => client.command({ cmd: 'pickRemove', id })}
+    onclear={() => client.command({ cmd: 'picksClear' })}
+  />
+{/snippet}

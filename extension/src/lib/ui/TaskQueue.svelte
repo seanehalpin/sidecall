@@ -1,22 +1,20 @@
 <script lang="ts">
-  import BanIcon from '@lucide/svelte/icons/ban';
-  import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
-  import CircleXIcon from '@lucide/svelte/icons/circle-x';
-  import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
-  import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+  import SquareIcon from '@lucide/svelte/icons/square';
+  import XIcon from '@lucide/svelte/icons/x';
   import {
     Queue,
     QueueItem,
+    QueueItemAction,
+    QueueItemActions,
     QueueItemContent,
     QueueItemDescription,
+    QueueItemIndicator,
     QueueList,
     QueueSection,
     QueueSectionContent,
     QueueSectionLabel,
+    QueueSectionTrigger,
   } from '$lib/components/ai-elements/queue';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import { CollapsibleTrigger } from '$lib/components/ui/collapsible';
   import { cn } from '$lib/utils';
   import type { Task } from '../protocol';
   import { groupTasks, reorderIds } from '../rail-state';
@@ -37,12 +35,12 @@
 
   const FINISHED_SHOWN = 5;
 
-  let open = $state(true);
   let dragId: string | null = $state(null);
   let overId: string | null = $state(null);
 
   const groups = $derived(groupTasks(tasks));
   const active = $derived(groups.running.length + groups.queued.length);
+  const finished = $derived(groups.finished.slice(0, FINISHED_SHOWN));
 
   function statusLine(task: Task): string {
     if (task.status === 'blocked') return 'Waiting for your approval';
@@ -79,77 +77,86 @@
 </script>
 
 {#if tasks.length > 0}
-  <Queue class="queue flex-none rounded-none border-x-0 border-b-0 bg-card px-3 py-1.5 shadow-none" role="region" aria-label="Task queue">
-    <QueueSection bind:open>
-      <CollapsibleTrigger class="group flex w-full cursor-pointer items-center py-1 text-sm font-medium outline-none">
-        <QueueSectionLabel label="Tasks">
-          {#if active > 0}<Badge variant="secondary" class="count h-4 px-1.5 text-[10px]">{active}</Badge>{/if}
-        </QueueSectionLabel>
-      </CollapsibleTrigger>
-      <QueueSectionContent>
-        <QueueList class="mt-1">
-          {#each groups.running as task (task.id)}
-            <QueueItem class="task running border border-primary/40 bg-primary/5" data-task-id={task.id} data-status={task.status}>
-              <div class="flex items-center gap-2">
-                <LoaderIcon class="size-3.5 shrink-0 animate-spin text-primary" aria-hidden="true" />
-                <QueueItemContent class="title font-medium text-foreground">{task.title}</QueueItemContent>
-                <Button variant="outline" size="xs" {disabled} onclick={() => oncancel(task.id)}>Stop</Button>
-              </div>
-              <QueueItemDescription class="status ml-5.5 truncate">{statusLine(task)}</QueueItemDescription>
-            </QueueItem>
-          {/each}
-          {#each groups.queued as task (task.id)}
-            <QueueItem
-              class={cn('task queued cursor-grab', dragId === task.id && 'dragging opacity-40', overId === task.id && dragId !== task.id && 'over shadow-[inset_0_2px_0_var(--color-primary)]')}
-              data-task-id={task.id}
-              data-status={task.status}
-              draggable={!disabled}
-              ondragstart={(e) => ondragstart(e, task.id)}
-              ondragover={(e) => ondragover(e, task.id)}
-              ondrop={(e) => ondrop(e, task.id)}
-              {ondragend}
-            >
-              <div class="flex items-center gap-2">
-                <GripVerticalIcon class="grip size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <QueueItemContent class="title">{task.title}</QueueItemContent>
-                <Button variant="ghost" size="xs" {disabled} onclick={() => oncancel(task.id)}>Cancel</Button>
-              </div>
-              <QueueItemDescription class="status ml-5.5">Queued</QueueItemDescription>
-            </QueueItem>
-          {/each}
-          {#if groups.queued.length > 1 && dragId !== null}
-            <li
-              class={cn('drop-end h-2.5 rounded', overId === null && 'over shadow-[inset_0_2px_0_var(--color-primary)]')}
-              ondragover={(e) => ondragover(e, null)}
-              ondrop={(e) => ondrop(e, null)}
-              aria-hidden="true"
-            ></li>
-          {/if}
-          {#each groups.finished.slice(0, FINISHED_SHOWN) as task (task.id)}
-            <QueueItem class={cn('task finished opacity-60', task.status)} data-task-id={task.id} data-status={task.status}>
-              <div class="flex items-center gap-2">
-                {#if task.status === 'completed'}
-                  <CircleCheckIcon class="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                {:else if task.status === 'failed'}
-                  <CircleXIcon class="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
-                {:else}
-                  <BanIcon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                {/if}
-                <QueueItemContent class="title">{task.title}</QueueItemContent>
-              </div>
-              <QueueItemDescription class="status ml-5.5 line-clamp-2">
-                {#if task.status === 'completed'}
-                  {task.summary ?? 'Done'}
-                {:else if task.status === 'failed'}
-                  <span class="error-text text-destructive">Failed: {task.error ?? 'unknown error'}</span>
-                {:else}
-                  Cancelled
-                {/if}
-              </QueueItemDescription>
-            </QueueItem>
-          {/each}
-        </QueueList>
-      </QueueSectionContent>
-    </QueueSection>
+  <Queue class="queue" role="region" aria-label="Task queue">
+    {#if active > 0}
+      <QueueSection>
+        <QueueSectionTrigger>
+          <QueueSectionLabel count={active} label={active === 1 ? 'Task' : 'Tasks'} />
+        </QueueSectionTrigger>
+        <QueueSectionContent>
+          <QueueList>
+            {#each groups.running as task (task.id)}
+              <QueueItem class="task running" data-task-id={task.id} data-status={task.status}>
+                <div class="flex items-center gap-2">
+                  <QueueItemIndicator class="animate-pulse border-primary bg-primary/20" />
+                  <QueueItemContent class="title">{task.title}</QueueItemContent>
+                  <QueueItemActions>
+                    <QueueItemAction {disabled} aria-label="Stop" title="Stop" onclick={() => oncancel(task.id)}><SquareIcon /></QueueItemAction>
+                  </QueueItemActions>
+                </div>
+                <QueueItemDescription class="status truncate">{statusLine(task)}</QueueItemDescription>
+              </QueueItem>
+            {/each}
+            {#each groups.queued as task (task.id)}
+              <QueueItem
+                class={cn('task queued cursor-grab', dragId === task.id && 'dragging opacity-40', overId === task.id && dragId !== task.id && 'over bg-muted')}
+                data-task-id={task.id}
+                data-status={task.status}
+                draggable={!disabled}
+                ondragstart={(e) => ondragstart(e, task.id)}
+                ondragover={(e) => ondragover(e, task.id)}
+                ondrop={(e) => ondrop(e, task.id)}
+                {ondragend}
+              >
+                <div class="flex items-center gap-2">
+                  <QueueItemIndicator />
+                  <QueueItemContent class="title">{task.title}</QueueItemContent>
+                  <QueueItemActions>
+                    <QueueItemAction {disabled} aria-label="Cancel" title="Cancel" onclick={() => oncancel(task.id)}><XIcon /></QueueItemAction>
+                  </QueueItemActions>
+                </div>
+                <QueueItemDescription class="status">Queued</QueueItemDescription>
+              </QueueItem>
+            {/each}
+            {#if groups.queued.length > 1 && dragId !== null}
+              <li
+                class={cn('drop-end h-2 rounded-md', overId === null && 'over bg-muted')}
+                ondragover={(e) => ondragover(e, null)}
+                ondrop={(e) => ondrop(e, null)}
+                aria-hidden="true"
+              ></li>
+            {/if}
+          </QueueList>
+        </QueueSectionContent>
+      </QueueSection>
+    {/if}
+    {#if finished.length > 0}
+      <QueueSection>
+        <QueueSectionTrigger>
+          <QueueSectionLabel count={finished.length} label="Done" />
+        </QueueSectionTrigger>
+        <QueueSectionContent>
+          <QueueList>
+            {#each finished as task (task.id)}
+              <QueueItem class={cn('task finished', task.status)} data-task-id={task.id} data-status={task.status}>
+                <div class="flex items-center gap-2">
+                  <QueueItemIndicator completed class={cn(task.status === 'failed' && 'border-destructive bg-destructive/20')} />
+                  <QueueItemContent class="title" completed={task.status === 'completed'}>{task.title}</QueueItemContent>
+                </div>
+                <QueueItemDescription class="status line-clamp-2" completed={task.status === 'completed'}>
+                  {#if task.status === 'completed'}
+                    {task.summary ?? 'Done'}
+                  {:else if task.status === 'failed'}
+                    <span class="error-text text-destructive">Failed: {task.error ?? 'unknown error'}</span>
+                  {:else}
+                    Cancelled
+                  {/if}
+                </QueueItemDescription>
+              </QueueItem>
+            {/each}
+          </QueueList>
+        </QueueSectionContent>
+      </QueueSection>
+    {/if}
   </Queue>
 {/if}

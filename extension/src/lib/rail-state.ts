@@ -9,6 +9,7 @@ import type {
   ServerMessage,
   Settings,
   Task,
+  TaskEventKind,
   TranscriptEntry,
 } from './protocol';
 import type { PickChip } from './picker-protocol';
@@ -26,6 +27,14 @@ export interface TranscriptItem {
   /** True while an agent reply is still streaming (agent.text.delta). */
   streaming: boolean;
 }
+
+/** One worker step (task.event), shown as an item of the task in the transcript. */
+export interface TaskStep {
+  kind: TaskEventKind;
+  text: string;
+}
+
+export const TASK_STEPS_LIMIT = 50;
 
 export interface RailError {
   code: string;
@@ -58,6 +67,8 @@ export interface RailState {
   approvals: Approval[];
   /** Latest task.event text per task id. */
   lastTaskEvent: Record<string, string>;
+  /** The task.event steps seen per task id (capped), oldest first. */
+  taskSteps: Record<string, TaskStep[]>;
   settings: Settings | null;
   /** What the daemon says the voice pipeline is doing (call.state); 'connecting' locally while starting. */
   callState: CallState;
@@ -92,6 +103,7 @@ export function initialRailState(): RailState {
     tasks: [],
     approvals: [],
     lastTaskEvent: {},
+    taskSteps: {},
     settings: null,
     callState: 'idle',
     inCall: false,
@@ -124,7 +136,7 @@ export type LocalEvent =
 
 const PER_REPO_RESET: Pick<
   RailState,
-  'repo' | 'transcript' | 'partial' | 'tasks' | 'approvals' | 'lastTaskEvent' | 'settings'
+  'repo' | 'transcript' | 'partial' | 'tasks' | 'approvals' | 'lastTaskEvent' | 'taskSteps' | 'settings'
 > = {
   repo: null,
   transcript: [],
@@ -132,6 +144,7 @@ const PER_REPO_RESET: Pick<
   tasks: [],
   approvals: [],
   lastTaskEvent: {},
+  taskSteps: {},
   settings: null,
 };
 
@@ -163,6 +176,17 @@ function patchTask(tasks: Task[], id: string, patch: Partial<Task>): Task[] {
   return tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
 }
 
+/** Steps for `tasks`: what we already saw, else the daemon's lastEvent as a single status step. */
+function stepsForTasks(tasks: Task[], known: Record<string, TaskStep[]>): Record<string, TaskStep[]> {
+  const out: Record<string, TaskStep[]> = {};
+  for (const t of tasks) {
+    const steps = known[t.id];
+    if (steps?.length) out[t.id] = steps;
+    else if (t.lastEvent) out[t.id] = [{ kind: 'status', text: t.lastEvent }];
+  }
+  return out;
+}
+
 function eventsFromTasks(tasks: Task[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const t of tasks) if (t.lastEvent) out[t.id] = t.lastEvent;
@@ -187,6 +211,7 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
         tasks: rs.tasks,
         approvals: rs.approvals,
         lastTaskEvent: eventsFromTasks(rs.tasks),
+        taskSteps: stepsForTasks(rs.tasks, {}),
         settings: rs.settings,
         lastError: null,
       };
@@ -283,14 +308,19 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
         const text = t.lastEvent ?? state.lastTaskEvent[t.id];
         if (text) lastTaskEvent[t.id] = text;
       }
-      return { ...state, tasks, lastTaskEvent };
+      return { ...state, tasks, lastTaskEvent, taskSteps: stepsForTasks(tasks, state.taskSteps) };
     }
     case 'task.event': {
-      const { taskId, text } = msg.payload;
+      const { taskId, kind, text } = msg.payload;
+      const prev = state.taskSteps[taskId] ?? [];
+      const last = prev[prev.length - 1];
+      // A repeat of the last step (or of the lastEvent it was seeded from) replaces it.
+      const steps = last && last.text === text ? [...prev.slice(0, -1), { kind, text }] : [...prev, { kind, text }].slice(-TASK_STEPS_LIMIT);
       return {
         ...state,
         tasks: patchTask(state.tasks, taskId, { lastEvent: text }),
         lastTaskEvent: { ...state.lastTaskEvent, [taskId]: text },
+        taskSteps: { ...state.taskSteps, [taskId]: steps },
       };
     }
     case 'task.completed': {

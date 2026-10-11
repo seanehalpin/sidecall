@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from "$lib/utils";
-	import type { ChatStatus } from "./types.js";
+	import type { ChatStatus } from "../context/types.js";
 	import LoaderIcon from "@lucide/svelte/icons/loader";
 	import SendIcon from "@lucide/svelte/icons/send";
 	import SquareIcon from "@lucide/svelte/icons/square";
@@ -61,7 +61,7 @@
 	});
 
 	let ariaLabel = $derived.by(() => {
-		return isGenerating ? "Stop" : "Send";
+		return isGenerating ? "Stop" : "Submit";
 	});
 
 	let iconClass = $derived.by(() => {
