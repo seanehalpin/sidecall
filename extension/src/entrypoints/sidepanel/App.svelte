@@ -45,7 +45,7 @@
 
 <ModeWatcher disableHeadScriptInjection />
 <Tooltip.Provider delayDuration={300}>
-  <div class="rail flex h-screen flex-col bg-background text-foreground" data-view={view}>
+  <div class="rail sc-panel flex h-screen flex-col" data-view={view}>
     <Header
       {rail}
       canCall={sendable}

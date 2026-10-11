@@ -88,7 +88,7 @@
           {:else}
             {@const [head, rest] = splitSystem(entry.text)}
             <!-- Same collapsible look as a task card, so every system line reads alike. -->
-            <TaskUI.Root open={false}>
+            <TaskUI.Root class="sc-system" open={false}>
               <TaskUI.Trigger title={head} />
               {#if rest}
                 <TaskUI.Content><TaskUI.Item>{rest}</TaskUI.Item></TaskUI.Content>
@@ -98,7 +98,7 @@
         </div>
       {:else if entry.role === 'user'}
         <Message.Root from="user" class="entry user" data-role="user" data-turn-id={entry.turnId} data-streaming={entry.streaming}>
-          <Message.Content class="whitespace-pre-wrap">
+          <Message.Content class="sc-bubble-user whitespace-pre-wrap">
             <p>
               {#each segmentMarkers(entry.text) as seg, i (i)}{#if seg.kind === 'marker' && pickHistory[seg.id]}{@const known = pickHistory[seg.id]}{@const live = liveIds.has(seg.id)}{@const tip = `${known?.label ?? ''}\n${known?.tooltip ?? ''}`}<Tooltip.Root
                     ><Tooltip.Trigger
@@ -139,7 +139,7 @@
           </Message.Content>
         </Message.Root>
       {:else}
-        <Message.Root from="assistant" class="entry agent" data-role="agent" data-turn-id={entry.turnId} data-streaming={entry.streaming}>
+        <Message.Root from="assistant" class="entry agent sc-message-agent" data-role="agent" data-turn-id={entry.turnId} data-streaming={entry.streaming}>
           <Message.Content>
             {#if entry.streaming && !entry.text}
               <Shimmer>Thinking…</Shimmer>
@@ -152,7 +152,7 @@
     {/each}
     {#if partial}
       <Message.Root from="user" class="entry user partial" data-role="user">
-        <Message.Content class="opacity-60">{partial}</Message.Content>
+        <Message.Content class="sc-bubble-user opacity-60">{partial}</Message.Content>
       </Message.Root>
     {/if}
     {#if showThinking}

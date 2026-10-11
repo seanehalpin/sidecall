@@ -70,11 +70,11 @@
 
 /* --- Side panel: dark ------------------------------------------------------------- */
 .dark {
-	--background: oklch(0.148 0.004 228.8);
+	--background: oklch(19.574% 0.00002 271.152);
 	--foreground: oklch(0.987 0.002 197.1);
 	--muted: oklch(0.275 0.011 216.9);
 	--muted-foreground: oklch(0.723 0.014 214.4);
-	--card: oklch(0.218 0.008 223.9);
+	--card: oklch(100% 0.00011 271.152 / 0.039);
 	--card-foreground: oklch(0.987 0.002 197.1);
 	--popover: oklch(0.218 0.008 223.9);
 	--popover-foreground: oklch(0.987 0.002 197.1);
@@ -106,4 +106,40 @@
 	--sidebar-accent-foreground: oklch(0.987 0.002 197.1);
 	--sidebar-border: oklch(1 0 0 / 10%);
 	--sidebar-ring: oklch(0.56 0.021 213.5);
+}
+
+
+/* --- Component surfaces --------------------------------------------------------- */
+/* Each surface's look, applied by src/styles/components.css. Defaults point at the theme
+ * colours above; set any of these to your own variables or values. They apply in both
+ * modes unless you also override them inside .dark { }. */
+:root {
+	/* Panel */
+	--sc-panel-bg: var(--background);
+	--sc-panel-fg: var(--foreground);
+	--sc-header-bg: var(--background);
+	--sc-header-border: var(--border);
+
+	/* Your messages */
+	--sc-user-bubble-bg: var(--secondary);
+	--sc-user-bubble-fg: var(--foreground);
+	--sc-user-bubble-radius: 12px;
+	--sc-user-bubble-padding: 10px 14px;
+
+	/* Agent replies */
+	--sc-agent-fg: var(--foreground);
+
+	/* Task cards and system lines */
+	--sc-task-fg: var(--muted-foreground);
+	--sc-task-fg-hover: var(--foreground);
+	--sc-task-rule: var(--border); /* the line beside the steps */
+
+	/* Queue, approval cards, composer */
+	--sc-queue-bg: var(--card);
+	--sc-queue-border: var(--border);
+	--sc-approval-bg: var(--card);
+	--sc-approval-border: var(--border);
+	--sc-composer-bg: var(--card);
+	--sc-composer-border: var(--border);
+	--sc-composer-radius: 12px;
 }

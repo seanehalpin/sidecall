@@ -25,7 +25,7 @@
 {#if approvals.length > 0}
   <section class="approvals flex flex-col gap-2" aria-label="Approvals">
     {#each approvals as approval (approval.id)}
-      <Confirmation.Root class="card" data-approval-id={approval.id} approval={{ id: approval.id }} state="approval-requested">
+      <Confirmation.Root class="card sc-approval" data-approval-id={approval.id} approval={{ id: approval.id }} state="approval-requested">
         <Confirmation.Title>
           <Confirmation.Request>
             The worker wants to run <code class="command font-mono">{approval.command}</code>. <span class="reason"

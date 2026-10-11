@@ -58,7 +58,7 @@
       {/each}
     </Suggestions>
   {/if}
-  <PromptInput.Root onSubmit={submit}>
+  <PromptInput.Root class="sc-composer" onSubmit={submit}>
     {#if header}
       <PromptInput.Header>{@render header()}</PromptInput.Header>
     {/if}

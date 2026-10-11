@@ -77,7 +77,7 @@
 </script>
 
 {#if tasks.length > 0}
-  <Queue class="queue" role="region" aria-label="Task queue">
+  <Queue class="queue sc-queue" role="region" aria-label="Task queue">
     {#if active > 0}
       <QueueSection>
         <QueueSectionTrigger>

@@ -1,0 +1,56 @@
+/*
+ * Surface styles for the side panel, driven by the --sc-* variables in colors.css.
+ *
+ * This file is plain CSS outside Tailwind's layers, so it always wins over the utility
+ * classes in the vendored components; edit it freely.
+ */
+
+.sc-panel {
+	background: var(--sc-panel-bg);
+	color: var(--sc-panel-fg);
+}
+
+.sc-header {
+	background: var(--sc-header-bg);
+	border-color: var(--sc-header-border);
+}
+
+.sc-bubble-user {
+	background: var(--sc-user-bubble-bg);
+	color: var(--sc-user-bubble-fg);
+	border-radius: var(--sc-user-bubble-radius);
+	padding: var(--sc-user-bubble-padding);
+}
+
+.sc-message-agent {
+	color: var(--sc-agent-fg);
+}
+
+.sc-task [data-slot='collapsible-trigger'] > div,
+.sc-system [data-slot='collapsible-trigger'] > div {
+	color: var(--sc-task-fg);
+}
+.sc-task [data-slot='collapsible-trigger'] > div:hover,
+.sc-system [data-slot='collapsible-trigger'] > div:hover {
+	color: var(--sc-task-fg-hover);
+}
+.sc-task [data-slot='collapsible-content'] > div,
+.sc-system [data-slot='collapsible-content'] > div {
+	border-color: var(--sc-task-rule);
+}
+
+.sc-queue {
+	background: var(--sc-queue-bg);
+	border-color: var(--sc-queue-border);
+}
+
+.sc-approval {
+	background: var(--sc-approval-bg);
+	border-color: var(--sc-approval-border);
+}
+
+.sc-composer {
+	background: var(--sc-composer-bg);
+	border-color: var(--sc-composer-border);
+	border-radius: var(--sc-composer-radius);
+}
