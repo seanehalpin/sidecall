@@ -2,7 +2,7 @@
   import MessageSquareIcon from '@lucide/svelte/icons/message-square';
   import * as Conversation from '$lib/components/ai-elements/conversation';
   import PickChipView from './PickChipView.svelte';
-  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+  import * as TaskUI from '$lib/components/ai-elements/task';
 
   /** "Task completed: Title. Long report…" → ["Task completed: Title.", "Long report…"]. */
   function splitSystem(text: string): [string, string] {
@@ -46,6 +46,13 @@
   const showThinking = $derived(thinking && !streamingAgent);
 
   /** The "Task queued" system row is where a task lives in the conversation. */
+  /** Tasks that have a card in the chat; their later outcome lines would just repeat it. */
+  const carded = $derived(
+    new Set(entries.filter((e) => e.taskId && e.text.startsWith('Task queued') && taskById.has(e.taskId)).map((e) => e.taskId)),
+  );
+  const isRepeat = (entry: TranscriptItem) =>
+    entry.role === 'system' && !!entry.taskId && carded.has(entry.taskId) && !entry.text.startsWith('Task queued');
+
   function queuedTask(entry: TranscriptItem): Task | undefined {
     if (!entry.taskId || !entry.text.startsWith('Task queued')) return undefined;
     return taskById.get(entry.taskId);
@@ -65,10 +72,13 @@
       </Conversation.EmptyState>
     {/if}
     {#each entries as entry (entry.role + ':' + entry.turnId)}
-      {#if entry.role === 'system'}
+      {#if isRepeat(entry)}
+        <!-- Outcome already shown on the task's card: keep it for screen readers (and scripts) only. -->
+        <div class="entry system sr-only" data-role="system" data-turn-id={entry.turnId}>{entry.text}</div>
+      {:else if entry.role === 'system'}
         {@const task = queuedTask(entry)}
         <div
-          class={cn('entry system', !task && 'text-xs text-muted-foreground')}
+          class="entry system"
           data-role="system"
           data-turn-id={entry.turnId}
           data-streaming={entry.streaming}
@@ -77,18 +87,13 @@
             <TaskCard {task} title={entry.text} steps={taskSteps[task.id] ?? []} />
           {:else}
             {@const [head, rest] = splitSystem(entry.text)}
-            {#if rest}
-              <!-- Collapsed to its first sentence; the worker's full report is one click away. -->
-              <details class="group">
-                <summary class="flex cursor-pointer list-none items-start gap-1.5 hover:text-foreground [&::-webkit-details-marker]:hidden">
-                  <ChevronRightIcon class="mt-px size-3.5 shrink-0 transition-transform group-open:rotate-90" />
-                  <span class="min-w-0">{head}</span>
-                </summary>
-                <p class="mt-1 pl-5 whitespace-pre-wrap">{rest}</p>
-              </details>
-            {:else}
-              <p class="pl-5">{head}</p>
-            {/if}
+            <!-- Same collapsible look as a task card, so every system line reads alike. -->
+            <TaskUI.Root open={false}>
+              <TaskUI.Trigger title={head} />
+              {#if rest}
+                <TaskUI.Content><TaskUI.Item>{rest}</TaskUI.Item></TaskUI.Content>
+              {/if}
+            </TaskUI.Root>
           {/if}
         </div>
       {:else if entry.role === 'user'}
