@@ -129,7 +129,7 @@
       </div>
     {/if}
 
-    <div class="flex flex-none flex-col gap-2 p-4">
+    <div class="flex flex-none flex-col gap-2 pl-4 pb-4 pr-4">
       {#if view === 'main'}
         <Approvals
           approvals={rail.approvals}

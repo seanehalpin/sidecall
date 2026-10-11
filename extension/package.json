@@ -43,6 +43,7 @@
     "@shikijs/themes": "^4.5.0",
     "ai": "^6.0.302",
     "bippy": "0.7.3",
+    "cuelume": "^0.2.4",
     "dompurify": "^3.4.16",
     "mode-watcher": "^1.1.0",
     "runed": "^0.37.1",

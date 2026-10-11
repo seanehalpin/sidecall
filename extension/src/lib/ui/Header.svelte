@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { play } from 'cuelume';
   import MicIcon from '@lucide/svelte/icons/mic';
   import MicOffIcon from '@lucide/svelte/icons/mic-off';
   import PhoneIcon from '@lucide/svelte/icons/phone';
@@ -32,6 +33,21 @@
   const label = $derived(callLabel(rail));
   const title = $derived(rail.repo ? rail.repo.name : 'Sidecall');
   const subtitle = $derived(rail.repo ? rail.repo.path : (rail.origin ?? 'No local app'));
+
+  // Interaction sounds for the call controls only (cuelume, synthesised with Web Audio).
+  function startCall() {
+    play('open');
+    oncall();
+  }
+  function hangUp() {
+    play('close');
+    onhangup();
+  }
+  function toggleMute() {
+    const muting = !rail.muted;
+    play('toggle', { direction: muting ? 'forward' : 'back' });
+    onmute(muting);
+  }
 </script>
 
 <header class="sc-header flex items-center gap-2 border-b p-4">
@@ -82,7 +98,7 @@
               {...props}
               variant={rail.muted ? 'destructive' : 'ghost'}
               size="icon-sm"
-              onclick={() => onmute(!rail.muted)}
+              onclick={toggleMute}
               aria-pressed={rail.muted}
               aria-label={rail.muted ? 'Unmute' : 'Mute'}
             >
@@ -95,7 +111,7 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Button {...props} variant="destructive" size="icon-sm" onclick={onhangup} aria-label="End call">
+            <Button {...props} variant="destructive" size="icon-sm" onclick={hangUp} aria-label="End call">
               <PhoneOffIcon />
             </Button>
           {/snippet}
@@ -110,7 +126,7 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Button {...props} variant="ghost" size="icon-sm" disabled={!canCall} onclick={oncall} aria-label="Start call">
+            <Button {...props} variant="ghost" size="icon-sm" disabled={!canCall} onclick={startCall} aria-label="Start call">
               <PhoneIcon />
             </Button>
           {/snippet}
