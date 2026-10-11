@@ -134,6 +134,7 @@
   --sc-taskcard-border: var(--border);
   --sc-system-fg: var(--muted-foreground);
   --sc-system-failed-fg: var(--destructive);
+  --sc-system-rule: var(--border); /* the line beside an expanded task's details */
   --sc-claude-mark: #d97757; /* the pixel critter */
 
   /* Approval cards and composer */
