@@ -1,5 +1,7 @@
 <script lang="ts">
+  import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
   import { SvelteSet } from 'svelte/reactivity';
+  import * as Confirmation from '$lib/components/ai-elements/confirmation';
   import type { Approval } from '../protocol';
 
   let {
@@ -22,59 +24,33 @@
 </script>
 
 {#if approvals.length > 0}
-  <section class="approvals" aria-label="Approvals">
+  <section class="approvals flex flex-col gap-2 border-b bg-muted/40 p-3" aria-label="Approvals">
     {#each approvals as approval (approval.id)}
-      <article class="card" data-approval-id={approval.id}>
-        <div class="title">Needs your OK</div>
-        <code>{approval.command}</code>
-        <p class="reason">{approval.reason}</p>
-        <div class="actions">
-          <button
-            class="primary"
+      <Confirmation.Root
+        class="card border-amber-500/40 bg-amber-500/10 text-foreground"
+        data-approval-id={approval.id}
+        approval={{ id: approval.id }}
+        state="approval-requested"
+      >
+        <Confirmation.Title class="flex items-center gap-1.5 text-xs font-semibold">
+          <ShieldAlertIcon class="size-3.5 text-amber-600 dark:text-amber-400" />
+          Needs your OK
+        </Confirmation.Title>
+        <Confirmation.Request>
+          <code class="command block rounded-lg bg-background/70 px-2.5 py-2 font-mono text-xs break-all whitespace-pre-wrap">{approval.command}</code>
+          <p class="reason mt-1.5 text-xs text-muted-foreground">{approval.reason}</p>
+        </Confirmation.Request>
+        <Confirmation.Actions>
+          <Confirmation.Action
+            variant="outline"
             disabled={disabled || responded.has(approval.id)}
-            onclick={() => respond(approval.id, true)}>Approve</button
+            onclick={() => respond(approval.id, false)}>Deny</Confirmation.Action
           >
-          <button disabled={disabled || responded.has(approval.id)} onclick={() => respond(approval.id, false)}
-            >Deny</button
+          <Confirmation.Action disabled={disabled || responded.has(approval.id)} onclick={() => respond(approval.id, true)}
+            >Approve</Confirmation.Action
           >
-        </div>
-      </article>
+        </Confirmation.Actions>
+      </Confirmation.Root>
     {/each}
   </section>
 {/if}
-
-<style>
-  .approvals {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  .card {
-    border: 1px solid var(--warn-border);
-    background: var(--warn-bg);
-    border-radius: var(--radius);
-    padding: 8px 10px;
-  }
-  .title {
-    font-weight: 600;
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-  code {
-    display: block;
-    font-family: var(--mono);
-    font-size: 12px;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-  .reason {
-    margin: 4px 0 8px;
-    color: var(--fg-muted);
-  }
-  .actions {
-    display: flex;
-    gap: 6px;
-  }
-</style>

@@ -1,4 +1,9 @@
 <script lang="ts">
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import { OPTIONS_PORT, parsePort } from '@/lib/messaging';
   import { createRailClient } from '@/lib/rail-client.svelte';
   import ConnectionDot from '@/lib/ui/ConnectionDot.svelte';
@@ -79,101 +84,71 @@
   }
 </script>
 
-<main>
-  <h1>Sidecall settings</h1>
+<Tooltip.Provider>
+<main class="mx-auto flex min-h-full max-w-xl flex-col gap-4 bg-background px-4 py-8 text-foreground">
+  <h1 class="m-0 font-heading text-xl font-semibold">Sidecall settings</h1>
 
-  <section>
-    <h2>Connection</h2>
-    <p class="status" data-connection={rail.connection}>
-      <ConnectionDot status={rail.connection} />
-      <span>{statusText}</span>
-    </p>
-    <form onsubmit={savePort}>
-      <label for="port">Daemon port</label>
-      <input
-        id="port"
-        type="number"
-        min="1"
-        max="65535"
-        value={portInput}
-        oninput={(e) => (portEdit = e.currentTarget.value)}
-      />
-      <button type="submit" disabled={parsedPort === null || parsedPort === client.daemonPort}>Save</button>
-      {#if saved}<span class="muted">Saved</span>{/if}
-    </form>
-  </section>
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Connection</Card.Title>
+    </Card.Header>
+    <Card.Content class="flex flex-col gap-3">
+      <p class="status m-0 flex items-center gap-2" data-connection={rail.connection}>
+        <ConnectionDot status={rail.connection} compact />
+        <span>{statusText}</span>
+      </p>
+      <form class="flex items-center gap-2" onsubmit={savePort}>
+        <Label for="port">Daemon port</Label>
+        <Input
+          id="port"
+          type="number"
+          min="1"
+          max="65535"
+          class="w-28"
+          value={portInput}
+          oninput={(e) => (portEdit = e.currentTarget.value)}
+        />
+        <Button type="submit" disabled={parsedPort === null || parsedPort === client.daemonPort}>Save</Button>
+        {#if saved}<span class="text-muted-foreground">Saved</span>{/if}
+      </form>
+    </Card.Content>
+  </Card.Root>
 
-  <section>
-    <h2>Microphone</h2>
-    <p class="status" data-mic={mic}>{micText}</p>
-    <p class="muted">Voice calls need the microphone. Chrome can only ask for it here, so grant it once.</p>
-    {#if mic !== 'granted'}
-      <button class="primary" onclick={grantMic} disabled={micBusy}>Grant microphone</button>
-    {/if}
-    {#if micError}<p class="error-text" role="alert">{micError}</p>{/if}
-  </section>
-
-  <section>
-    <h2>Pairing</h2>
-    {#if rail.paired}
-      <p>This browser is paired with the daemon.</p>
-      <button onclick={() => client.command({ cmd: 'forgetPairing' })}>Forget pairing</button>
-    {:else}
-      <Pairing
-        error={rail.lastError}
-        disabled={rail.connection !== 'connected'}
-        onpair={(code) => client.command({ cmd: 'pair', code })}
-      />
-      {#if rail.connection !== 'connected'}
-        <p class="muted">Start the daemon to pair: <code>cd daemon && uv run sidecall start</code></p>
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Microphone</Card.Title>
+    </Card.Header>
+    <Card.Content class="flex flex-col gap-3">
+      <p class="status m-0" data-mic={mic}>{micText}</p>
+      <p class="m-0 text-muted-foreground">Voice calls need the microphone. Chrome can only ask for it here, so grant it once.</p>
+      {#if mic !== 'granted'}
+        <Button class="self-start" onclick={grantMic} disabled={micBusy}>Grant microphone</Button>
       {/if}
-    {/if}
-  </section>
-</main>
+      {#if micError}<p class="error-text m-0 text-destructive" role="alert">{micError}</p>{/if}
+    </Card.Content>
+  </Card.Root>
 
-<style>
-  main {
-    max-width: 560px;
-    margin: 32px auto;
-    padding: 0 16px;
-  }
-  h1 {
-    font-size: 20px;
-  }
-  h2 {
-    font-size: 14px;
-    margin: 0 0 8px;
-  }
-  section {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  section > button {
-    align-self: flex-start;
-  }
-  p {
-    margin: 0;
-  }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  form {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  input[type='number'] {
-    width: 9ch;
-  }
-  code {
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-</style>
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Pairing</Card.Title>
+    </Card.Header>
+    <Card.Content class="flex flex-col gap-3">
+      {#if rail.paired}
+        <p class="m-0">This browser is paired with the daemon.</p>
+        <Button variant="outline" class="self-start" onclick={() => client.command({ cmd: 'forgetPairing' })}>Forget pairing</Button>
+      {:else}
+        <Pairing
+          error={rail.lastError}
+          disabled={rail.connection !== 'connected'}
+          onpair={(code) => client.command({ cmd: 'pair', code })}
+        />
+        {#if rail.connection !== 'connected'}
+          <p class="m-0 text-muted-foreground">
+            Start the daemon to pair: <code class="font-mono text-xs">cd daemon && uv run sidecall start</code>
+          </p>
+        {/if}
+      {/if}
+    </Card.Content>
+  </Card.Root>
+</main>
+</Tooltip.Provider>

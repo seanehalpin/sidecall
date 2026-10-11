@@ -1,5 +1,14 @@
 <script lang="ts">
+  import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+  import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+  import MonitorOffIcon from '@lucide/svelte/icons/monitor-off';
+  import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
+  import XIcon from '@lucide/svelte/icons/x';
   import { browser } from 'wxt/browser';
+  import { Alert } from '$lib/components/ui/alert';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import { RAIL_PORT } from '@/lib/messaging';
   import { createRailClient } from '@/lib/rail-client.svelte';
   import { canSend, railView } from '@/lib/rail-state';
@@ -21,6 +30,8 @@
   const INLINE_ERRORS = new Set(['bad_pairing_code', 'unauthorized', 'bad_path', 'browse_cancelled', 'no_origin']);
   const banner = $derived(view === 'main' && rail.lastError && !INLINE_ERRORS.has(rail.lastError.code) ? rail.lastError : null);
 
+  const thinking = $derived(rail.inCall && rail.callState === 'thinking');
+
   let composer: Composer | undefined = $state();
 
   function openSettings() {
@@ -28,154 +39,115 @@
   }
 </script>
 
-<div class="rail" data-view={view}>
-  <Header
-    {rail}
-    canCall={sendable}
-    onsettings={openSettings}
-    oncall={() => client.command({ cmd: 'callStart' })}
-    onhangup={() => client.command({ cmd: 'callEnd' })}
-    onmute={(muted) => client.command({ cmd: 'callMute', muted })}
-  />
+<Tooltip.Provider delayDuration={300}>
+  <div class="rail flex h-screen flex-col bg-background text-foreground" data-view={view}>
+    <Header
+      {rail}
+      canCall={sendable}
+      onsettings={openSettings}
+      oncall={() => client.command({ cmd: 'callStart' })}
+      onhangup={() => client.command({ cmd: 'callEnd' })}
+      onmute={(muted) => client.command({ cmd: 'callMute', muted })}
+    />
 
-  {#if view === 'main'}
-    <Approvals
-      approvals={rail.approvals}
-      disabled={!sendable}
-      onrespond={(id, allow) => client.send({ type: 'approval.respond', payload: { id, allow } })}
-    />
-    {#if rail.callError}
-      <div class="banner" role="alert" data-call-error={rail.callError.code}>
-        <span>{rail.callError.message}</span>
-        <span class="actions">
-          {#if rail.callError.code === 'mic_permission'}
-            <button class="link" onclick={openSettings}>Open settings</button>
-          {/if}
-          <button onclick={() => client.command({ cmd: 'clearError' })} aria-label="Dismiss">×</button>
-        </span>
-      </div>
-    {/if}
-    {#if banner}
-      <div class="banner" role="alert">
-        <span>{banner.message}</span>
-        <button onclick={() => client.command({ cmd: 'clearError' })} aria-label="Dismiss">×</button>
-      </div>
-    {/if}
-    <Transcript
-      entries={rail.transcript}
-      partial={rail.partial}
-      picks={rail.picks}
-      pickHistory={rail.pickHistory}
-      onhighlight={(id) => client.command({ cmd: 'pickHighlight', id })}
-    />
-    <TaskQueue
-      tasks={rail.tasks}
-      lastTaskEvent={rail.lastTaskEvent}
-      disabled={!sendable}
-      oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
-      onreorder={(ids) => client.send({ type: 'task.reorder', payload: { ids } })}
-    />
-    <PickTray
-      picks={rail.picks}
-      onhover={(id) => client.command({ cmd: 'pickHighlight', id })}
-      oninsert={(id) => void composer?.insertAtCursor(`[${id}]`)}
-      onremove={(id) => client.command({ cmd: 'pickRemove', id })}
-      onclear={() => client.command({ cmd: 'picksClear' })}
-    />
-  {:else}
-    <div class="blocking">
-      {#if view === 'offline'}
-        <h2>{rail.connection === 'connecting' ? 'Connecting to the daemon…' : 'Daemon offline'}</h2>
-        <p class="muted">Start the daemon:</p>
-        <pre>cd daemon && uv run sidecall start</pre>
-        <p class="muted small">Looking on port {client.daemonPort}.</p>
-        <button onclick={() => client.command({ cmd: 'reconnect' })}>Retry now</button>
-      {:else if view === 'pairing'}
-        <h2>Pair with the daemon</h2>
-        <Pairing error={rail.lastError} onpair={(code) => client.command({ cmd: 'pair', code })} />
-      {:else if view === 'no_origin'}
-        <h2>No local app</h2>
-        <p class="muted">Open your local app (localhost) in this window.</p>
-      {:else if view === 'repo_unknown' && rail.repoUnknown}
-        {@const origin = rail.repoUnknown}
-        <RepoSetup
-          {origin}
-          error={rail.lastError}
-          onmap={(path) => client.send({ type: 'repo.map', payload: { origin, path } })}
-          onbrowse={() => client.send({ type: 'repo.browse', payload: { origin } })}
-        />
-      {:else}
-        <p class="muted">Connecting to your repo…</p>
+    {#if view === 'main'}
+      <Approvals
+        approvals={rail.approvals}
+        disabled={!sendable}
+        onrespond={(id, allow) => client.send({ type: 'approval.respond', payload: { id, allow } })}
+      />
+      {#if rail.callError}
+        <Alert variant="destructive" class="banner m-3 mb-0 flex w-auto items-center justify-between gap-2 py-2" data-call-error={rail.callError.code}>
+          <span class="flex items-center gap-2 text-xs"><CircleAlertIcon class="size-4 shrink-0" />{rail.callError.message}</span>
+          <span class="actions flex flex-none items-center gap-1">
+            {#if rail.callError.code === 'mic_permission'}
+              <Button variant="outline" size="xs" onclick={openSettings}>Open settings</Button>
+            {/if}
+            <Button variant="ghost" size="icon-xs" onclick={() => client.command({ cmd: 'clearError' })} aria-label="Dismiss"><XIcon /></Button>
+          </span>
+        </Alert>
       {/if}
-    </div>
-  {/if}
+      {#if banner}
+        <Alert variant="destructive" class="banner m-3 mb-0 flex w-auto items-center justify-between gap-2 py-2">
+          <span class="flex items-center gap-2 text-xs"><CircleAlertIcon class="size-4 shrink-0" />{banner.message}</span>
+          <Button variant="ghost" size="icon-xs" onclick={() => client.command({ cmd: 'clearError' })} aria-label="Dismiss"><XIcon /></Button>
+        </Alert>
+      {/if}
+      <Transcript
+        entries={rail.transcript}
+        partial={rail.partial}
+        picks={rail.picks}
+        pickHistory={rail.pickHistory}
+        {thinking}
+        onhighlight={(id) => client.command({ cmd: 'pickHighlight', id })}
+        onsuggest={(text) => void composer?.insertAtCursor(text)}
+      />
+      <TaskQueue
+        tasks={rail.tasks}
+        lastTaskEvent={rail.lastTaskEvent}
+        disabled={!sendable}
+        oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
+        onreorder={(ids) => client.send({ type: 'task.reorder', payload: { ids } })}
+      />
+      <PickTray
+        picks={rail.picks}
+        onhover={(id) => client.command({ cmd: 'pickHighlight', id })}
+        oninsert={(id) => void composer?.insertAtCursor(`[${id}]`)}
+        onremove={(id) => client.command({ cmd: 'pickRemove', id })}
+        onclear={() => client.command({ cmd: 'picksClear' })}
+      />
+    {:else}
+      <div class="blocking flex-1 overflow-y-auto p-4">
+        <Card.Root>
+          <Card.Content class="flex flex-col gap-3">
+            {#if view === 'offline'}
+              <div class="flex items-center gap-2">
+                {#if rail.connection === 'connecting'}
+                  <LoaderIcon class="size-4 animate-spin text-muted-foreground" />
+                {:else}
+                  <PlugZapIcon class="size-4 text-muted-foreground" />
+                {/if}
+                <h2 class="m-0 font-heading text-base font-semibold">
+                  {rail.connection === 'connecting' ? 'Connecting to the daemon…' : 'Daemon offline'}
+                </h2>
+              </div>
+              <p class="m-0 text-muted-foreground">Start the daemon:</p>
+              <pre class="m-0 rounded-xl bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap select-all">cd daemon && uv run sidecall start</pre>
+              <p class="m-0 text-xs text-muted-foreground">Looking on port {client.daemonPort}.</p>
+              <Button variant="outline" class="self-start" onclick={() => client.command({ cmd: 'reconnect' })}>Retry now</Button>
+            {:else if view === 'pairing'}
+              <h2 class="m-0 font-heading text-base font-semibold">Pair with the daemon</h2>
+              <Pairing error={rail.lastError} onpair={(code) => client.command({ cmd: 'pair', code })} />
+            {:else if view === 'no_origin'}
+              <div class="flex items-center gap-2">
+                <MonitorOffIcon class="size-4 text-muted-foreground" />
+                <h2 class="m-0 font-heading text-base font-semibold">No local app</h2>
+              </div>
+              <p class="m-0 text-muted-foreground">Open your local app (localhost) in this window.</p>
+            {:else if view === 'repo_unknown' && rail.repoUnknown}
+              {@const origin = rail.repoUnknown}
+              <RepoSetup
+                {origin}
+                error={rail.lastError}
+                onmap={(path) => client.send({ type: 'repo.map', payload: { origin, path } })}
+                onbrowse={() => client.send({ type: 'repo.browse', payload: { origin } })}
+              />
+            {:else}
+              <p class="m-0 flex items-center gap-2 text-muted-foreground">
+                <LoaderIcon class="size-4 animate-spin" />Connecting to your repo…
+              </p>
+            {/if}
+          </Card.Content>
+        </Card.Root>
+      </div>
+    {/if}
 
-  <Composer
-    bind:this={composer}
-    disabled={!sendable}
-    showPickHint={view === 'main' && rail.picks.length === 0}
-    inCall={rail.inCall}
-    onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
-  />
-</div>
-
-<style>
-  .rail {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-  }
-  .blocking {
-    flex: 1;
-    padding: 24px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  h2 {
-    font-size: 15px;
-    margin: 0;
-  }
-  p {
-    margin: 0;
-  }
-  .small {
-    font-size: 11px;
-  }
-  pre {
-    margin: 0;
-    padding: 8px 10px;
-    background: var(--bg-subtle);
-    border-radius: 6px;
-    font-family: var(--mono);
-    font-size: 12px;
-    white-space: pre-wrap;
-    user-select: all;
-  }
-  .blocking button {
-    align-self: flex-start;
-  }
-  .banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 6px 12px;
-    background: var(--warn-bg);
-    border-bottom: 1px solid var(--warn-border);
-    font-size: 12px;
-  }
-  .banner button {
-    border: none;
-    background: transparent;
-    padding: 0 4px;
-  }
-  .banner .actions {
-    display: inline-flex;
-    gap: 4px;
-    flex: none;
-  }
-  .banner .link {
-    text-decoration: underline;
-  }
-</style>
+    <Composer
+      bind:this={composer}
+      disabled={!sendable}
+      showPickHint={view === 'main' && rail.picks.length === 0}
+      inCall={rail.inCall}
+      onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
+    />
+  </div>
+</Tooltip.Provider>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import * as PromptInput from '$lib/components/ai-elements/prompt-input';
   import { insertAtRange } from '../picks/insert';
 
   let {
@@ -10,20 +11,13 @@
   }: { disabled: boolean; showPickHint?: boolean; inCall?: boolean; onsend: (text: string) => void } = $props();
 
   let text = $state('');
-  let field: HTMLTextAreaElement | undefined = $state();
+  let field: HTMLTextAreaElement | null = $state(null);
 
   function submit() {
     const value = text.trim();
     if (!value || disabled) return;
     onsend(value);
     text = '';
-  }
-
-  function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      submit();
-    }
   }
 
   /**
@@ -41,59 +35,29 @@
   }
 </script>
 
-<form
-  class="composer"
-  onsubmit={(e) => {
-    e.preventDefault();
-    submit();
-  }}
->
-  <textarea
-    bind:this={field}
-    bind:value={text}
-    {onkeydown}
-    {disabled}
-    rows="2"
-    placeholder={disabled ? 'Connect to a repo to start' : 'Message the agent (Enter to send, Shift+Enter for a new line)'}
-    aria-label="Message"
-  ></textarea>
-  <div class="row">
-    <span class="hint muted">
-      {#if inCall}
-        <span class="call-hint">On a call: just talk, or type here</span>
-      {:else if showPickHint}
-        <span class="pick-hint">⌥-click elements on the page, then refer to them as [1], [2]</span>
-      {:else}
-        Type your request, or start a voice call from the phone button
-      {/if}
-    </span>
-    <button class="primary" type="submit" disabled={disabled || text.trim() === ''}>Send</button>
-  </div>
-</form>
-
-<style>
-  .composer {
-    border-top: 1px solid var(--border);
-    padding: 8px 12px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: none;
-  }
-  textarea {
-    width: 100%;
-    resize: none;
-    min-height: 44px;
-    max-height: 160px;
-    field-sizing: content;
-  }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-  .hint {
-    font-size: 11px;
-  }
-</style>
+<div class="composer flex-none border-t bg-card px-3 pt-2.5 pb-3">
+  <PromptInput.Root onSubmit={submit}>
+    <PromptInput.Body>
+      <PromptInput.Textarea
+        bind:ref={field}
+        bind:value={text}
+        {disabled}
+        rows={1}
+        placeholder={disabled ? 'Connect to a repo to start' : 'Message the agent…'}
+        aria-label="Message"
+      />
+    </PromptInput.Body>
+    <PromptInput.Toolbar class="gap-2 px-3 pb-2">
+      <span class="hint min-w-0 text-xs text-muted-foreground">
+        {#if inCall}
+          <span class="call-hint">On a call: just talk, or type here</span>
+        {:else if showPickHint}
+          <span class="pick-hint">⌥-click elements on the page, then refer to them as [1], [2]</span>
+        {:else}
+          Type your request, or start a voice call from the phone button
+        {/if}
+      </span>
+      <PromptInput.Submit class="shrink-0" disabled={disabled || text.trim() === ''} />
+    </PromptInput.Toolbar>
+  </PromptInput.Root>
+</div>

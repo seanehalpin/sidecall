@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
 
 // Pinned public key: keeps the extension ID stable across unpacked installs, so
@@ -12,7 +13,10 @@ export default defineConfig({
   modules: ['@wxt-dev/module-svelte'],
   // `pnpm dev` only builds and watches; load the output into your own Chrome.
   webExt: { disabled: true },
+  // shadcn-svelte's generated imports use `$lib`; WXT turns this into a tsconfig path and a Vite alias.
+  alias: { $lib: 'src/lib' },
   vite: () => ({
+    plugins: [tailwindcss()],
     resolve: {
       alias: {
         // bippy's root entry imports `react` for a hook the picker never uses; keep React out

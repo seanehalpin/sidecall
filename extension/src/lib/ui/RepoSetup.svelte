@@ -1,4 +1,7 @@
 <script lang="ts">
+  import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import type { RailError } from '../rail-state';
 
   let {
@@ -26,45 +29,17 @@
   }
 </script>
 
-<div class="setup">
-  <h2>Which repo is this?</h2>
-  <p class="muted"><code>{origin}</code> isn't mapped to a folder yet.</p>
-  <form onsubmit={submit}>
-    <input type="text" bind:value={path} placeholder="/Users/you/code/my-app" aria-label="Repo path" />
-    <button class="primary" type="submit" disabled={path.trim() === ''}>Use path</button>
+<div class="setup flex flex-col gap-3">
+  <h2 class="m-0 font-heading text-base font-semibold">Which repo is this?</h2>
+  <p class="m-0 text-muted-foreground">
+    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs break-all">{origin}</code> isn't mapped to a folder yet.
+  </p>
+  <form class="flex gap-2" onsubmit={submit}>
+    <Input type="text" bind:value={path} placeholder="/Users/you/code/my-app" aria-label="Repo path" class="min-w-0 flex-1" />
+    <Button type="submit" disabled={path.trim() === ''}>Use path</Button>
   </form>
-  <button onclick={onbrowse}>Choose folder…</button>
+  <Button variant="outline" class="self-start" onclick={onbrowse}><FolderOpenIcon />Choose folder…</Button>
   {#if shownError}
-    <p class="error-text" role="alert">{shownError.message}</p>
+    <p class="error-text m-0 text-xs text-destructive" role="alert">{shownError.message}</p>
   {/if}
 </div>
-
-<style>
-  .setup {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  h2 {
-    font-size: 15px;
-    margin: 0;
-  }
-  p {
-    margin: 0;
-  }
-  form {
-    display: flex;
-    gap: 6px;
-  }
-  input {
-    flex: 1;
-    min-width: 0;
-  }
-  .setup > button {
-    align-self: flex-start;
-  }
-  code {
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-</style>

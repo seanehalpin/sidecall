@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
   import type { RailError } from '../rail-state';
 
   let {
@@ -18,60 +21,31 @@
   }
 </script>
 
-<form class="pairing" onsubmit={submit}>
-  <label for="pairing-code">Pairing code</label>
-  <p class="muted hint">
+<form class="pairing flex flex-col gap-2" onsubmit={submit}>
+  <Label for="pairing-code">Pairing code</Label>
+  <p class="hint m-0 text-xs text-muted-foreground">
     {#if shownError?.code === 'unauthorized'}
       The daemon no longer accepts this browser's token. Pair again with the code printed by
-      <code>sidecall start</code>.
+      <code class="font-mono">sidecall start</code>.
     {:else}
-      Enter the 6-digit code printed by <code>sidecall start</code>.
+      Enter the 6-digit code printed by <code class="font-mono">sidecall start</code>.
     {/if}
   </p>
-  <div class="row">
-    <input
+  <div class="flex gap-2">
+    <Input
       id="pairing-code"
       type="text"
       inputmode="numeric"
       autocomplete="one-time-code"
-      maxlength="9"
+      maxlength={9}
       placeholder="123456"
+      class="w-32 text-center font-mono tracking-widest"
       bind:value={code}
       {disabled}
     />
-    <button class="primary" type="submit" disabled={disabled || code.trim() === ''}>Pair</button>
+    <Button type="submit" disabled={disabled || code.trim() === ''}>Pair</Button>
   </div>
   {#if shownError && shownError.code !== 'unauthorized'}
-    <p class="error-text" role="alert">{shownError.message}</p>
+    <p class="error-text m-0 text-xs text-destructive" role="alert">{shownError.message}</p>
   {/if}
 </form>
-
-<style>
-  .pairing {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  label {
-    font-weight: 600;
-  }
-  .hint {
-    margin: 0;
-  }
-  .row {
-    display: flex;
-    gap: 6px;
-  }
-  input {
-    width: 9ch;
-    font-family: var(--mono);
-    letter-spacing: 0.1em;
-  }
-  p {
-    margin: 0;
-  }
-  code {
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-</style>

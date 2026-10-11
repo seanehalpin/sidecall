@@ -1,4 +1,23 @@
 <script lang="ts">
+  import BanIcon from '@lucide/svelte/icons/ban';
+  import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+  import CircleXIcon from '@lucide/svelte/icons/circle-x';
+  import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
+  import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+  import {
+    Queue,
+    QueueItem,
+    QueueItemContent,
+    QueueItemDescription,
+    QueueList,
+    QueueSection,
+    QueueSectionContent,
+    QueueSectionLabel,
+  } from '$lib/components/ai-elements/queue';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Button } from '$lib/components/ui/button';
+  import { CollapsibleTrigger } from '$lib/components/ui/collapsible';
+  import { cn } from '$lib/utils';
   import type { Task } from '../protocol';
   import { groupTasks, reorderIds } from '../rail-state';
 
@@ -60,165 +79,77 @@
 </script>
 
 {#if tasks.length > 0}
-  <section class="queue" aria-label="Task queue">
-    <button class="toggle" onclick={() => (open = !open)} aria-expanded={open}>
-      <span class="chev" class:open>▸</span>
-      Tasks
-      {#if active > 0}<span class="count">{active}</span>{/if}
-    </button>
-    {#if open}
-      <ul>
-        {#each groups.running as task (task.id)}
-          <li class="task running" data-task-id={task.id} data-status={task.status}>
-            <div class="main">
-              <div class="title">{task.title}</div>
-              <div class="status muted">{statusLine(task)}</div>
-            </div>
-            <button {disabled} onclick={() => oncancel(task.id)} title="Stop this task">Stop</button>
-          </li>
-        {/each}
-        {#each groups.queued as task (task.id)}
-          <li
-            class="task queued"
-            class:dragging={dragId === task.id}
-            class:over={overId === task.id && dragId !== task.id}
-            data-task-id={task.id}
-            data-status={task.status}
-            draggable={!disabled}
-            ondragstart={(e) => ondragstart(e, task.id)}
-            ondragover={(e) => ondragover(e, task.id)}
-            ondrop={(e) => ondrop(e, task.id)}
-            {ondragend}
-          >
-            <span class="grip" aria-hidden="true">⋮⋮</span>
-            <div class="main">
-              <div class="title">{task.title}</div>
-              <div class="status muted">Queued</div>
-            </div>
-            <button {disabled} onclick={() => oncancel(task.id)} title="Cancel this task">Cancel</button>
-          </li>
-        {/each}
-        {#if groups.queued.length > 1 && dragId !== null}
-          <li
-            class="drop-end"
-            class:over={overId === null}
-            ondragover={(e) => ondragover(e, null)}
-            ondrop={(e) => ondrop(e, null)}
-            aria-hidden="true"
-          ></li>
-        {/if}
-        {#each groups.finished.slice(0, FINISHED_SHOWN) as task (task.id)}
-          <li class="task finished {task.status}" data-task-id={task.id} data-status={task.status}>
-            <div class="main">
-              <div class="title">{task.title}</div>
-              <div class="status">
+  <Queue class="queue flex-none rounded-none border-x-0 border-b-0 bg-card px-3 py-1.5 shadow-none" role="region" aria-label="Task queue">
+    <QueueSection bind:open>
+      <CollapsibleTrigger class="group flex w-full cursor-pointer items-center py-1 text-sm font-medium outline-none">
+        <QueueSectionLabel label="Tasks">
+          {#if active > 0}<Badge variant="secondary" class="count h-4 px-1.5 text-[10px]">{active}</Badge>{/if}
+        </QueueSectionLabel>
+      </CollapsibleTrigger>
+      <QueueSectionContent>
+        <QueueList class="mt-1">
+          {#each groups.running as task (task.id)}
+            <QueueItem class="task running border border-primary/40 bg-primary/5" data-task-id={task.id} data-status={task.status}>
+              <div class="flex items-center gap-2">
+                <LoaderIcon class="size-3.5 shrink-0 animate-spin text-primary" aria-hidden="true" />
+                <QueueItemContent class="title font-medium text-foreground">{task.title}</QueueItemContent>
+                <Button variant="outline" size="xs" {disabled} onclick={() => oncancel(task.id)}>Stop</Button>
+              </div>
+              <QueueItemDescription class="status ml-5.5 truncate">{statusLine(task)}</QueueItemDescription>
+            </QueueItem>
+          {/each}
+          {#each groups.queued as task (task.id)}
+            <QueueItem
+              class={cn('task queued cursor-grab', dragId === task.id && 'dragging opacity-40', overId === task.id && dragId !== task.id && 'over shadow-[inset_0_2px_0_var(--color-primary)]')}
+              data-task-id={task.id}
+              data-status={task.status}
+              draggable={!disabled}
+              ondragstart={(e) => ondragstart(e, task.id)}
+              ondragover={(e) => ondragover(e, task.id)}
+              ondrop={(e) => ondrop(e, task.id)}
+              {ondragend}
+            >
+              <div class="flex items-center gap-2">
+                <GripVerticalIcon class="grip size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <QueueItemContent class="title">{task.title}</QueueItemContent>
+                <Button variant="ghost" size="xs" {disabled} onclick={() => oncancel(task.id)}>Cancel</Button>
+              </div>
+              <QueueItemDescription class="status ml-5.5">Queued</QueueItemDescription>
+            </QueueItem>
+          {/each}
+          {#if groups.queued.length > 1 && dragId !== null}
+            <li
+              class={cn('drop-end h-2.5 rounded', overId === null && 'over shadow-[inset_0_2px_0_var(--color-primary)]')}
+              ondragover={(e) => ondragover(e, null)}
+              ondrop={(e) => ondrop(e, null)}
+              aria-hidden="true"
+            ></li>
+          {/if}
+          {#each groups.finished.slice(0, FINISHED_SHOWN) as task (task.id)}
+            <QueueItem class={cn('task finished opacity-60', task.status)} data-task-id={task.id} data-status={task.status}>
+              <div class="flex items-center gap-2">
+                {#if task.status === 'completed'}
+                  <CircleCheckIcon class="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                {:else if task.status === 'failed'}
+                  <CircleXIcon class="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
+                {:else}
+                  <BanIcon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                {/if}
+                <QueueItemContent class="title">{task.title}</QueueItemContent>
+              </div>
+              <QueueItemDescription class="status ml-5.5 line-clamp-2">
                 {#if task.status === 'completed'}
                   {task.summary ?? 'Done'}
                 {:else if task.status === 'failed'}
-                  <span class="error-text">Failed: {task.error ?? 'unknown error'}</span>
+                  <span class="error-text text-destructive">Failed: {task.error ?? 'unknown error'}</span>
                 {:else}
                   Cancelled
                 {/if}
-              </div>
-            </div>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
+              </QueueItemDescription>
+            </QueueItem>
+          {/each}
+        </QueueList>
+      </QueueSectionContent>
+    </QueueSection>
+  </Queue>
 {/if}
-
-<style>
-  .queue {
-    border-top: 1px solid var(--border);
-    max-height: 40%;
-    overflow-y: auto;
-    flex: none;
-  }
-  .toggle {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    padding: 8px 12px;
-    font-weight: 600;
-    text-align: left;
-  }
-  .chev {
-    display: inline-block;
-    transition: transform 0.1s;
-    font-size: 10px;
-  }
-  .chev.open {
-    transform: rotate(90deg);
-  }
-  .count {
-    font-weight: 500;
-    font-size: 11px;
-    background: var(--bg-subtle);
-    border-radius: 10px;
-    padding: 0 6px;
-  }
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0 12px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .task {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-  .main {
-    flex: 1;
-    min-width: 0;
-  }
-  .title {
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .status {
-    font-size: 12px;
-    overflow-wrap: anywhere;
-  }
-  .running {
-    border-color: var(--accent);
-  }
-  .running .status {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .queued {
-    cursor: grab;
-  }
-  .grip {
-    color: var(--fg-muted);
-    font-size: 10px;
-    letter-spacing: -2px;
-  }
-  .dragging {
-    opacity: 0.4;
-  }
-  .over {
-    box-shadow: inset 0 2px 0 var(--accent);
-  }
-  .drop-end {
-    height: 10px;
-  }
-  .finished {
-    opacity: 0.6;
-    border-style: dashed;
-  }
-</style>

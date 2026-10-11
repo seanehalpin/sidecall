@@ -288,7 +288,7 @@ describe('extension smoke', () => {
       await expect.poll(() => chip.getAttribute('data-status')).toBe('ready');
       await chip.getByText('[1]').waitFor();
       await chip.getByText('Page', { exact: true }).waitFor();
-      expect(await chip.getAttribute('title')).toContain('src/routes/+page.svelte:3:1 (element) · repeated 4×, instance 2');
+      expect(await chip.getAttribute('data-tip')).toContain('src/routes/+page.svelte:3:1 (element) · repeated 4×, instance 2');
 
       const add = await daemon.waitFor('pick.add', (m) => m.payload.id === 1);
       expect(add.payload.createdAt).toBeGreaterThanOrEqual(before + 60_000);
@@ -348,7 +348,7 @@ describe('extension smoke', () => {
       // The transcript renders [n] as pills with the stored tooltip; text is unchanged.
       const bubble = panel.locator('[data-role="user"]', { hasText: 'make [1] match [2]' }).last();
       expect(await bubble.locator('.marker').count()).toBe(2);
-      expect(await bubble.locator('.marker').first().getAttribute('title')).toContain('src/routes/+page.svelte:3:1');
+      expect(await bubble.locator('.marker').first().getAttribute('data-tip')).toContain('src/routes/+page.svelte:3:1');
       expect((await bubble.innerText()).trim()).toBe('make [1] match [2]');
       // task.created with pickIds consumed them.
       await panel.locator('[data-pick-id]').first().waitFor({ state: 'detached' });
