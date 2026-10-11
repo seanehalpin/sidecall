@@ -15,7 +15,8 @@
   import { canSend, railView } from '@/lib/rail-state';
   import Approvals from '@/lib/ui/Approvals.svelte';
   import Composer from '@/lib/ui/Composer.svelte';
-  import Header from '@/lib/ui/Header.svelte';
+  import CallControls from '@/lib/ui/CallControls.svelte';
+  import RepoMenu from '@/lib/ui/RepoMenu.svelte';
   import PickTray from '@/lib/ui/PickTray.svelte';
   import Pairing from '@/lib/ui/Pairing.svelte';
   import RepoSetup from '@/lib/ui/RepoSetup.svelte';
@@ -46,14 +47,6 @@
 <ModeWatcher disableHeadScriptInjection />
 <Tooltip.Provider delayDuration={300}>
   <div class="rail sc-panel flex h-screen flex-col" data-view={view}>
-    <Header
-      {rail}
-      canCall={sendable}
-      onsettings={openSettings}
-      oncall={() => client.command({ cmd: 'callStart' })}
-      onhangup={() => client.command({ cmd: 'callEnd' })}
-      onmute={(muted) => client.command({ cmd: 'callMute', muted })}
-    />
 
     {#if view === 'main'}
       {#if rail.callError}
@@ -151,11 +144,27 @@
         inCall={rail.inCall}
         suggestions={showSuggestions ? SUGGESTIONS : []}
         header={view === 'main' && rail.picks.length > 0 ? pickTray : undefined}
+        {leading}
+        {trailing}
         onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
       />
     </div>
   </div>
 </Tooltip.Provider>
+
+{#snippet leading()}
+  <RepoMenu {rail} onsettings={openSettings} />
+{/snippet}
+
+{#snippet trailing()}
+  <CallControls
+    {rail}
+    canCall={sendable}
+    oncall={() => client.command({ cmd: 'callStart' })}
+    onhangup={() => client.command({ cmd: 'callEnd' })}
+    onmute={(muted) => client.command({ cmd: 'callMute', muted })}
+  />
+{/snippet}
 
 {#snippet pickTray()}
   <PickTray

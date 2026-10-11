@@ -140,8 +140,10 @@ describe('extension smoke', () => {
     expect((await daemon.waitFor('repo.map', (m) => m.payload.path.startsWith('/'))).payload.origin).toBe(appOrigin);
 
     await expect.poll(() => panel.locator('.rail').getAttribute('data-view')).toBe('main');
-    await panel.locator('header .name').getByText('svelte5-app').waitFor();
-    expect(await panel.locator('header [data-status]').getAttribute('data-status')).toBe('connected');
+    await panel.getByRole('button', { name: 'Repo menu' }).click();
+    await panel.locator('.sc-repo-menu .name').getByText('svelte5-app').waitFor();
+    await panel.keyboard.press('Escape');
+    expect(await panel.locator('.composer [data-status]').getAttribute('data-status')).toBe('connected');
   });
 
   it('streams the agent reply, queues a task and approves a blocked step', async () => {
@@ -436,7 +438,7 @@ describe('extension smoke', () => {
   it('runs a voice call: mic grant, offer/answer, state, partial, mute, hang-up', async () => {
     const offscreens = () =>
       sw.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT' as never] }).then((c) => c.length));
-    const header = panel.locator('header');
+    const header = panel.locator('.composer'); // the call controls live in the message box
 
     // 1. Grant from the options page. The fake UI accepts the prompt, and also masks the
     //    no-grant case (spike 1, case B), so the NotAllowedError path is a manual check.
@@ -484,7 +486,7 @@ describe('extension smoke', () => {
       // environment (even a same-page loopback stays "new"), so "connected" is a manual check.
       .poll(() => sw.evaluate(() => (globalThis as unknown as { __sidecall: { callLog: { ev: string }[] } }).__sidecall.callLog.some((m) => m.ev === 'answered')), { timeout: 10_000 })
       .toBe(true);
-    await panel.locator('header [data-call-state]').waitFor();
+    await panel.locator('.composer [data-call-state]').waitFor();
     // Reaching listening sends the page in view, screenshot uploaded first.
     const callPage = (await daemon.waitFor('call.page')).payload.page;
     expect(callPage.url.startsWith(appOrigin)).toBe(true);

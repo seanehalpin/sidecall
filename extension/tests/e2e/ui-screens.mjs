@@ -236,7 +236,7 @@ try {
       daemon.send(ws, serverMsg('webrtc.answer', { sdp }));
     })();
   };
-  const header = panel.locator('header');
+  const header = panel.locator('.composer'); // call controls are in the message box now
   await header.getByRole('button', { name: 'Start call' }).click();
   await header.getByText('Connecting…').first().waitFor();
   await shot(panel, '09-call-connecting');

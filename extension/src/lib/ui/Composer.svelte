@@ -13,6 +13,8 @@
     pickedName = null,
     suggestions = [],
     header,
+    leading,
+    trailing,
     onsend,
   }: {
     disabled: boolean;
@@ -24,6 +26,10 @@
     suggestions?: string[];
     /** Rendered in the PromptInput header (the pick chips). */
     header?: Snippet;
+    /** Bottom-left of the box (the ⋯ repo menu). */
+    leading?: Snippet;
+    /** Bottom-right, before the send button (the call controls). */
+    trailing?: Snippet;
     onsend: (text: string) => void;
   } = $props();
 
@@ -63,29 +69,36 @@
     {#if header}
       <PromptInput.Header>{@render header()}</PromptInput.Header>
     {/if}
-    <!-- Like Claude's composer: one row, the send button pinned bottom-right inside the box
-         (it rides along as the text grows), and the text keeps clear of it. -->
-    <PromptInput.Body class="relative">
+    <PromptInput.Body>
+      <!-- On a call you talk instead: the field greys out and the send button goes. -->
       <PromptInput.Textarea
         bind:ref={field}
         bind:value={text}
-        {disabled}
+        disabled={disabled || inCall}
         placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message...'}
         aria-label="Message"
-        class="pr-12 text-sm"
+        class="text-sm"
       />
-      <Button
-        type="submit"
-        variant="ghost"
-        size="icon-sm"
-        class="sc-send absolute right-2 bottom-2"
-        disabled={disabled || text.trim() === ''}
-        aria-label="Send"
-        aria-keyshortcuts="Enter"
-        title="Send (Enter)"
-      >
-        <ArrowUpIcon />
-      </Button>
     </PromptInput.Body>
+    <PromptInput.Toolbar class="sc-composer-toolbar">
+      <div class="flex min-w-0 items-center gap-1">{@render leading?.()}</div>
+      <div class="flex shrink-0 items-center gap-1">
+        {@render trailing?.()}
+        {#if !inCall}
+          <Button
+            type="submit"
+            variant="ghost"
+            size="icon-sm"
+            class="sc-send"
+            disabled={disabled || text.trim() === ''}
+            aria-label="Send"
+            aria-keyshortcuts="Enter"
+            title="Send (Enter)"
+          >
+            <ArrowUpIcon />
+          </Button>
+        {/if}
+      </div>
+    </PromptInput.Toolbar>
   </PromptInput.Root>
 </div>
