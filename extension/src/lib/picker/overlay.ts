@@ -2,6 +2,8 @@
 // it is pointer-events: none; input is captured with window-level listeners instead, only
 // while ⌥ is held, so normal page interaction is never affected.
 import type { Rect } from '../protocol.gen';
+// The picker's colours (--studio-inspect…) come from the shared, user-editable colour file.
+import COLORS from '../../styles/colors.css?inline';
 import { OVERLAY_HOST_ID } from './util';
 
 export type PinState = 'normal' | 'dimmed' | 'highlighted' | 'stale';
@@ -13,35 +15,35 @@ export interface PinView {
   state: PinState;
 }
 
-const CSS_TEXT = `
+const CSS_TEXT = COLORS + `
 :host { all: initial; }
 .root { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 2147483647;
   font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .box { position: absolute; box-sizing: border-box; border-radius: 2px; }
-.hover { border: 2px solid #6d5efc; background: rgba(109, 94, 252, 0.18);
+.hover { border: 2px solid var(--studio-inspect); background: var(--studio-inspectFill);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .9), inset 0 0 0 1px rgba(255, 255, 255, .55); }
-.drag { border: 2px dashed #6d5efc; background: rgba(109, 94, 252, 0.14);
+.drag { border: 2px dashed var(--studio-inspect); background: var(--studio-inspectFill);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .9); }
-.pending { border: 2px solid #6d5efc; background: rgba(109, 94, 252, 0.10);
+.pending { border: 2px solid var(--studio-inspect); background: var(--studio-inspectFill);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .9); }
-.label { position: absolute; max-width: 60vw; padding: 3px 7px; border-radius: 4px; background: #1d1b2f;
-  color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px;
+.label { position: absolute; max-width: 60vw; padding: 3px 7px; border-radius: 4px; background: var(--studio-inspect);
+  color: var(--studio-onInspect); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px;
   box-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
 .hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); padding: 6px 12px;
   border-radius: 999px; background: #1d1b2f; color: #fff; font: 12px/1.2 system-ui, sans-serif;
   white-space: nowrap; box-shadow: 0 2px 10px rgba(0, 0, 0, .45); }
-.hint b { color: #b9b0ff; }
-.pin-box { border: 1.5px solid #6d5efc; }
+.hint b { color: var(--studio-inspect); }
+.pin-box { border: 1.5px solid var(--studio-inspect); }
 .badge { position: absolute; top: 0; left: 0; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
-  border-radius: 9px; background: #6d5efc; color: #fff; font-weight: 700; text-align: center; line-height: 18px;
+  border-radius: 9px; background: var(--studio-inspect); color: var(--studio-onInspect); font-weight: 700; text-align: center; line-height: 18px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
-[data-state="dimmed"] .pin-box { border-color: rgba(109, 94, 252, .35); }
-[data-state="dimmed"] .badge { background: rgba(109, 94, 252, .55); }
+[data-state="dimmed"] .pin-box { border-color: color-mix(in srgb, var(--studio-inspect) 35%, transparent); }
+[data-state="dimmed"] .badge { background: color-mix(in srgb, var(--studio-inspect) 55%, transparent); }
 [data-state="dimmed"] { opacity: .75; }
-[data-state="highlighted"] .pin-box { border-width: 3px; background: rgba(109, 94, 252, .18); }
-[data-state="highlighted"] .badge { background: #ff5c8a; transform: scale(1.2); }
-[data-state="stale"] .pin-box { border: 1.5px dashed #8a8a96; }
-[data-state="stale"] .badge { background: #8a8a96; }
+[data-state="highlighted"] .pin-box { border-width: 3px; background: var(--studio-inspectFill); }
+[data-state="highlighted"] .badge { background: var(--studio-inspectHighlight); transform: scale(1.2); }
+[data-state="stale"] .pin-box { border: 1.5px dashed var(--studio-inspectStale); }
+[data-state="stale"] .badge { background: var(--studio-inspectStale); }
 .pin { position: absolute; top: 0; left: 0; }
 `;
 

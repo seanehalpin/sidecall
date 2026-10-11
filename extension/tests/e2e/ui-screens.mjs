@@ -145,7 +145,21 @@ try {
   await panel.locator('[data-role="agent"][data-streaming="true"]').waitFor();
   await sleep(300);
   await shot(panel, '05-conversation');
-
+  // The chat must scroll once it overflows (it didn't, at first).
+  const scroll = await panel.evaluate(() => {
+    const log = document.querySelector('[role="log"]');
+    const box = log?.firstElementChild;
+    if (!(box instanceof HTMLElement)) return 'no conversation';
+    // Clone the real entries until they overflow, then try to scroll.
+    const originals = [...box.children];
+    const clones = [];
+    for (let i = 0; i < 12; i++) for (const c of originals) clones.push(box.appendChild(c.cloneNode(true)));
+    box.scrollTop = 1000;
+    const moved = box.scrollTop;
+    for (const c of clones) c.remove();
+    return moved > 0 ? `scrolls (scrollTop ${moved})` : `does not scroll (overflow-y ${getComputedStyle(box).overflowY})`;
+  });
+  console.log('chat:', scroll);
   // 5. Task queue: running, queued, done (and a failed one).
   const running = task('t1', 'Align card spacing', { status: 'running', lastEvent: 'Reading src/lib/Sidebar.svelte' });
   daemon.broadcast(

@@ -3,80 +3,15 @@
 @import "shadcn-svelte/tailwind.css";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist";
+/* All colours and the root text size live in src/styles/colors.css. */
+@import "../../styles/colors.css";
 
 /* Message responses render through streamdown-svelte; Tailwind skips node_modules, so scan it. */
 @source "../../../node_modules/streamdown-svelte/dist/**/*.{js,svelte,ts}";
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.148 0.004 228.8);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.148 0.004 228.8);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.148 0.004 228.8);
-	--primary: oklch(0.52 0.105 223.128);
-	--primary-foreground: oklch(0.984 0.019 200.873);
-	--secondary: oklch(0.967 0.001 286.375);
-	--secondary-foreground: oklch(0.21 0.006 285.885);
-	--muted: oklch(0.963 0.002 197.1);
-	--muted-foreground: oklch(0.56 0.021 213.5);
-	--accent: oklch(0.963 0.002 197.1);
-	--accent-foreground: oklch(0.218 0.008 223.9);
-	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.925 0.005 214.3);
-	--input: oklch(0.925 0.005 214.3);
-	--ring: oklch(0.723 0.014 214.4);
-	--chart-1: oklch(0.872 0.007 219.6);
-	--chart-2: oklch(0.56 0.021 213.5);
-	--chart-3: oklch(0.45 0.017 213.2);
-	--chart-4: oklch(0.378 0.015 216);
-	--chart-5: oklch(0.275 0.011 216.9);
-	--radius: 0.625rem;
-	--sidebar: oklch(0.987 0.002 197.1);
-	--sidebar-foreground: oklch(0.148 0.004 228.8);
-	--sidebar-primary: oklch(0.609 0.126 221.723);
-	--sidebar-primary-foreground: oklch(0.984 0.019 200.873);
-	--sidebar-accent: oklch(0.963 0.002 197.1);
-	--sidebar-accent-foreground: oklch(0.218 0.008 223.9);
-	--sidebar-border: oklch(0.925 0.005 214.3);
-	--sidebar-ring: oklch(0.723 0.014 214.4);
-}
 
-.dark {
-	--background: oklch(0.148 0.004 228.8);
-	--foreground: oklch(0.987 0.002 197.1);
-	--card: oklch(0.218 0.008 223.9);
-	--card-foreground: oklch(0.987 0.002 197.1);
-	--popover: oklch(0.218 0.008 223.9);
-	--popover-foreground: oklch(0.987 0.002 197.1);
-	--primary: oklch(0.45 0.085 224.283);
-	--primary-foreground: oklch(0.984 0.019 200.873);
-	--secondary: oklch(0.274 0.006 286.033);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.275 0.011 216.9);
-	--muted-foreground: oklch(0.723 0.014 214.4);
-	--accent: oklch(0.275 0.011 216.9);
-	--accent-foreground: oklch(0.987 0.002 197.1);
-	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.56 0.021 213.5);
-	--chart-1: oklch(0.872 0.007 219.6);
-	--chart-2: oklch(0.56 0.021 213.5);
-	--chart-3: oklch(0.45 0.017 213.2);
-	--chart-4: oklch(0.378 0.015 216);
-	--chart-5: oklch(0.275 0.011 216.9);
-	--sidebar: oklch(0.218 0.008 223.9);
-	--sidebar-foreground: oklch(0.987 0.002 197.1);
-	--sidebar-primary: oklch(0.715 0.143 215.221);
-	--sidebar-primary-foreground: oklch(0.302 0.056 229.695);
-	--sidebar-accent: oklch(0.275 0.011 216.9);
-	--sidebar-accent-foreground: oklch(0.987 0.002 197.1);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.56 0.021 213.5);
-}
 
 @theme inline {
 	--font-sans: 'Inter Variable', sans-serif;
@@ -134,11 +69,14 @@
 }
 
 /* Chrome's injected extension-page defaults set body to 75%; override them. */
+html {
+	font-size: var(--sidecall-root-font-size, 16px);
+}
+
 html,
 body {
 	height: 100%;
 	margin: 0;
-	font-size: 13px;
 	line-height: 1.45;
 }
 

@@ -46,7 +46,8 @@
 </script>
 
 <Conversation.Root class="min-h-0 flex-1" aria-live="polite">
-  <Conversation.Content>
+  <!-- Content is the scroller (the stick-to-bottom context watches it), so it needs a height and overflow. -->
+  <Conversation.Content class="min-h-0 flex-1 overflow-y-auto [&>*]:shrink-0">
     {#if entries.length === 0 && !partial}
       <Conversation.EmptyState
         class="empty"

@@ -388,7 +388,12 @@ async function runFixture(fx, idx, ctx, tmp) {
     }, 8000);
     const snap = await pinsSnapshot(page);
     check(label('reload: pins-restore re-anchors to the same cards'), st[titlePin.id]?.status === 'ok' && st[rootPin.id]?.status === 'ok' && find(snap, titlePin.id)?.text === 'Project 3' && /^Project 4/.test(find(snap, rootPin.id)?.text ?? ''), `title ${find(snap, titlePin.id)?.text} root ${find(snap, rootPin.id)?.text} in ${Date.now() - t0}ms`);
-    const pn2 = await pinNode(page, titlePin.id);
+    // The pin is drawn on the frame after its status arrives, so wait for it rather than racing it.
+    let pn2 = null;
+    await until(async () => {
+      pn2 = await pinNode(page, titlePin.id);
+      return !!pn2 && pn2.display !== 'none' && pn2.state === 'normal';
+    }, 3000);
     check(label('reload: restored pin drawn'), !!pn2 && pn2.display !== 'none' && pn2.state === 'normal');
     const gone = await until(async () => {
       const m = await page.evaluate(() => window.__msgs.filter((x) => x.t === 'pin-status' && x.id === 99));
