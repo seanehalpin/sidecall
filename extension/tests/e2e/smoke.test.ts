@@ -205,9 +205,9 @@ describe('extension smoke', () => {
     expect(await panel.locator('[data-role="agent"]').count()).toBe(1);
     await panel.locator('[data-role="system"]').getByText('Task queued: Red heading').waitFor();
 
-    // Queue: running task with live status line, two queued.
+    // Task cards: the running one with its live status line, two queued.
     await panel.locator('[data-task-id="t1"]').getByText('Waiting for your approval').waitFor();
-    expect(await panel.locator('li.queued').count()).toBe(2);
+    expect(await panel.locator('.task-stack [data-status="queued"]').count()).toBe(2);
 
     // Approve the blocked step.
     const card = panel.locator('[data-approval-id="ap1"]');
@@ -219,12 +219,9 @@ describe('extension smoke', () => {
     await panel.locator('[data-task-id="t1"]').getByText('editing src/routes/+page.svelte').waitFor();
   });
 
-  it('cancels and reorders queued tasks', async () => {
+  it('cancels a queued task from its card', async () => {
     await panel.locator('[data-task-id="t3"]').getByRole('button', { name: 'Cancel' }).click();
     expect((await daemon.waitFor('task.cancel')).payload).toEqual({ id: 't3' });
-
-    await panel.locator('[data-task-id="t3"]').dragTo(panel.locator('[data-task-id="t2"]'));
-    expect((await daemon.waitFor('task.reorder')).payload).toEqual({ ids: ['t3', 't2'] });
   });
 
   describe('picks (service worker + rail half)', () => {

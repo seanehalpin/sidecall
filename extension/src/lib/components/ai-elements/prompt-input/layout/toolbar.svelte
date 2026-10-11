@@ -10,7 +10,7 @@
 	// indexing
 </script>
 
-<div class={cn("flex items-center justify-between p-1", className)} {...props}>
+<div class={cn("flex items-center justify-between p-3", className)} {...props}>
 	{#if children}
 		{@render children()}
 	{/if}

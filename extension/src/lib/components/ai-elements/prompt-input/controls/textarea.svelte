@@ -133,7 +133,7 @@
 	<Textarea
 		bind:ref
 		class={cn(
-			"w-full resize-none rounded-none border-none p-3 shadow-none ring-0 outline-none",
+			"w-full resize-none rounded-none border-none p-4 shadow-none ring-0 outline-none",
 			"field-sizing-content bg-transparent dark:bg-transparent",
 			"max-h-48 min-h-10",
 			"focus-visible:ring-0",
@@ -152,7 +152,7 @@
 	<Textarea
 		bind:ref
 		class={cn(
-			"w-full resize-none rounded-none border-none p-3 shadow-none ring-0 outline-none",
+			"w-full resize-none rounded-none border-none p-4 shadow-none ring-0 outline-none",
 			"field-sizing-content bg-transparent dark:bg-transparent",
 			"max-h-48 min-h-10",
 			"focus-visible:ring-0",

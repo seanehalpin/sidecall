@@ -301,7 +301,7 @@
 />
 <form
 	bind:this={formRef}
-	class={cn("bg-background w-full overflow-hidden rounded-xl border shadow-sm", className)}
+	class={cn("bg-background w-full overflow-hidden rounded-xl shadow-sm", className)}
 	onsubmit={handleSubmit}
 	{...props}
 >

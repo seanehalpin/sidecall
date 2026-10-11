@@ -2,7 +2,7 @@
   import MessageSquareIcon from '@lucide/svelte/icons/message-square';
   import * as Conversation from '$lib/components/ai-elements/conversation';
   import PickChipView from './PickChipView.svelte';
-  import * as TaskUI from '$lib/components/ai-elements/task';
+  import ClaudeMark from './ClaudeMark.svelte';
 
   /** "Task completed: Title. Long report…" → ["Task completed: Title.", "Long report…"]. */
   function splitSystem(text: string): [string, string] {
@@ -17,7 +17,6 @@
   import { segmentMarkers } from '../picks/markers';
   import type { Task } from '../protocol';
   import type { PickHistoryEntry, TaskStep, TranscriptItem } from '../rail-state';
-  import TaskCard from './TaskCard.svelte';
 
   let {
     entries,
@@ -45,18 +44,10 @@
   const streamingAgent = $derived(entries.some((e) => e.role === 'agent' && e.streaming));
   const showThinking = $derived(thinking && !streamingAgent);
 
-  /** The "Task queued" system row is where a task lives in the conversation. */
-  /** Tasks that have a card in the chat; their later outcome lines would just repeat it. */
-  const carded = $derived(
-    new Set(entries.filter((e) => e.taskId && e.text.startsWith('Task queued') && taskById.has(e.taskId)).map((e) => e.taskId)),
-  );
-  const isRepeat = (entry: TranscriptItem) =>
-    entry.role === 'system' && !!entry.taskId && carded.has(entry.taskId) && !entry.text.startsWith('Task queued');
-
-  function queuedTask(entry: TranscriptItem): Task | undefined {
-    if (!entry.taskId || !entry.text.startsWith('Task queued')) return undefined;
-    return taskById.get(entry.taskId);
-  }
+  /** "Task queued" is shown as a card above the composer while it's active, not in the chat. */
+  const isQueuedNote = (entry: TranscriptItem) => entry.role === 'system' && entry.text.startsWith('Task queued');
+  /** "Task completed/failed/cancelled": the one line a task leaves in the chat. */
+  const isTaskOutcome = (entry: TranscriptItem) => entry.role === 'system' && !!entry.taskId && !isQueuedNote(entry);
 </script>
 
 <Conversation.Root class="min-h-0 flex-1" aria-live="polite">
@@ -72,29 +63,20 @@
       </Conversation.EmptyState>
     {/if}
     {#each entries as entry (entry.role + ':' + entry.turnId)}
-      {#if isRepeat(entry)}
-        <!-- Outcome already shown on the task's card: keep it for screen readers (and scripts) only. -->
+      {#if isQueuedNote(entry)}
+        <!-- Kept for screen readers (and scripts); the live card sits above the composer. -->
         <div class="entry system sr-only" data-role="system" data-turn-id={entry.turnId}>{entry.text}</div>
       {:else if entry.role === 'system'}
-        {@const task = queuedTask(entry)}
+        {@const [head] = splitSystem(entry.text)}
         <div
-          class="entry system"
+          class={cn('entry system sc-system-line flex items-start gap-2 text-xs', /^Task failed/.test(entry.text) && 'failed')}
           data-role="system"
           data-turn-id={entry.turnId}
           data-streaming={entry.streaming}
+          title={entry.text}
         >
-          {#if task}
-            <TaskCard {task} title={entry.text} steps={taskSteps[task.id] ?? []} />
-          {:else}
-            {@const [head, rest] = splitSystem(entry.text)}
-            <!-- Same collapsible look as a task card, so every system line reads alike. -->
-            <TaskUI.Root class="sc-system" open={false}>
-              <TaskUI.Trigger title={head} />
-              {#if rest}
-                <TaskUI.Content><TaskUI.Item>{rest}</TaskUI.Item></TaskUI.Content>
-              {/if}
-            </TaskUI.Root>
-          {/if}
+          {#if isTaskOutcome(entry)}<ClaudeMark size={14} class="mt-0.5" />{/if}
+          <span class="min-w-0">{head}</span>
         </div>
       {:else if entry.role === 'user'}
         <Message.Root from="user" class="entry user" data-role="user" data-turn-id={entry.turnId} data-streaming={entry.streaming}>

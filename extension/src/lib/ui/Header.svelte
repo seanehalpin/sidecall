@@ -32,7 +32,7 @@
   const subtitle = $derived(rail.repo ? rail.repo.path : (rail.origin ?? 'No local app'));
 </script>
 
-<header class="sc-header flex items-center gap-2 border-b px-3 py-2.5">
+<header class="sc-header flex items-center gap-2 border-b p-4">
   <Tooltip.Root>
     <Tooltip.Trigger class="min-w-0 flex-1 cursor-default text-left">
       <div class="name truncate font-heading text-sm leading-tight font-semibold">{title}</div>

@@ -19,7 +19,7 @@
   import PickTray from '@/lib/ui/PickTray.svelte';
   import Pairing from '@/lib/ui/Pairing.svelte';
   import RepoSetup from '@/lib/ui/RepoSetup.svelte';
-  import TaskQueue from '@/lib/ui/TaskQueue.svelte';
+  import TaskStack from '@/lib/ui/TaskStack.svelte';
   import Transcript from '@/lib/ui/Transcript.svelte';
 
   const client = createRailClient(RAIL_PORT);
@@ -84,7 +84,7 @@
         onhighlight={(id) => client.command({ cmd: 'pickHighlight', id })}
       />
     {:else}
-      <div class="blocking flex-1 overflow-y-auto p-4">
+      <div class="blocking flex-1 overflow-y-auto p-5">
         <Card.Root>
           <Card.Content class="flex flex-col gap-3">
             {#if view === 'offline'}
@@ -103,12 +103,12 @@
               <p class="m-0 text-xs text-muted-foreground">Looking on port {client.daemonPort}.</p>
               <Button variant="outline" class="self-start" onclick={() => client.command({ cmd: 'reconnect' })}>Retry now</Button>
             {:else if view === 'pairing'}
-              <h2 class="m-0 font-heading text-base font-semibold">Pair with the daemon</h2>
+              <h2 class="m-0  text-base font-semibold">Pair with the daemon</h2>
               <Pairing error={rail.lastError} onpair={(code) => client.command({ cmd: 'pair', code })} />
             {:else if view === 'no_origin'}
               <div class="flex items-center gap-2">
                 <MonitorOffIcon class="size-4 text-muted-foreground" />
-                <h2 class="m-0 font-heading text-base font-semibold">No local app</h2>
+                <h2 class="m-0 text-base font-semibold">No local app</h2>
               </div>
               <p class="m-0 text-muted-foreground">Open your local app (localhost) in this window.</p>
             {:else if view === 'repo_unknown' && rail.repoUnknown}
@@ -129,19 +129,18 @@
       </div>
     {/if}
 
-    <div class="flex flex-none flex-col gap-2 p-3">
+    <div class="flex flex-none flex-col gap-2 p-4">
       {#if view === 'main'}
         <Approvals
           approvals={rail.approvals}
           disabled={!sendable}
           onrespond={(id, allow) => client.send({ type: 'approval.respond', payload: { id, allow } })}
         />
-        <TaskQueue
+        <TaskStack
           tasks={rail.tasks}
           lastTaskEvent={rail.lastTaskEvent}
           disabled={!sendable}
           oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
-          onreorder={(ids) => client.send({ type: 'task.reorder', payload: { ids } })}
         />
       {/if}
       <Composer

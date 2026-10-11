@@ -26,22 +26,16 @@
 	color: var(--sc-agent-fg);
 }
 
-.sc-task [data-slot='collapsible-trigger'] > div,
-.sc-system [data-slot='collapsible-trigger'] > div {
-	color: var(--sc-task-fg);
-}
-.sc-task [data-slot='collapsible-trigger'] > div:hover,
-.sc-system [data-slot='collapsible-trigger'] > div:hover {
-	color: var(--sc-task-fg-hover);
-}
-.sc-task [data-slot='collapsible-content'] > div,
-.sc-system [data-slot='collapsible-content'] > div {
-	border-color: var(--sc-task-rule);
+.sc-taskcard {
+	background: var(--sc-taskcard-bg);
+	border-color: var(--sc-taskcard-border);
 }
 
-.sc-queue {
-	background: var(--sc-queue-bg);
-	border-color: var(--sc-queue-border);
+.sc-system-line {
+	color: var(--sc-system-fg);
+}
+.sc-system-line.failed {
+	color: var(--sc-system-failed-fg);
 }
 
 .sc-approval {
