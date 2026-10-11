@@ -58,9 +58,12 @@
     else if (rail.callState === 'listening') outcome('success');
   });
 
+  // Hanging up mirrors starting: a click now, then a falling close.
+  const HANGUP_GAP_MS = 200;
   function hangUp() {
     pendingSince = null;
-    cue('close');
+    cue('tap');
+    setTimeout(() => cue('close'), HANGUP_GAP_MS);
     onhangup();
   }
   function toggleMute() {
