@@ -4,6 +4,8 @@
   import PhoneIcon from '@lucide/svelte/icons/phone';
   import PhoneOffIcon from '@lucide/svelte/icons/phone-off';
   import SettingsIcon from '@lucide/svelte/icons/settings';
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import { Button } from '$lib/components/ui/button';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils';
@@ -33,15 +35,25 @@
 </script>
 
 <header class="sc-header flex items-center gap-2 border-b p-4">
-  <Tooltip.Root>
-    <Tooltip.Trigger class="min-w-0 flex-1 cursor-default text-left">
-      <div class="name truncate font-heading text-sm leading-tight font-semibold">{title}</div>
-      <div class="path truncate text-left text-xs text-muted-foreground" style="direction: rtl">
-        <span dir="ltr">{subtitle}</span>
-      </div>
-    </Tooltip.Trigger>
-    <Tooltip.Content class="max-w-[320px] break-all whitespace-pre-line">{rail.repo ? `${rail.repo.name}\n${rail.repo.path}` : subtitle}</Tooltip.Content>
-  </Tooltip.Root>
+  <!-- Repo name as a menu: the path and settings live inside it, out of the way. -->
+  <div class="min-w-0 flex-1">
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        class="sc-repo-trigger group inline-flex max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 -ml-1.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Repo menu"
+      >
+        <span class="name truncate font-heading text-sm leading-tight font-semibold">{title}</span>
+        <ChevronDownIcon class="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" class="sc-repo-menu w-64">
+        <DropdownMenu.Label class="path text-xs font-normal break-all text-muted-foreground">{subtitle}</DropdownMenu.Label>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item onSelect={onsettings}>
+          <SettingsIcon />Settings
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  </div>
 
   {#if !rail.inCall}
     <ConnectionDot status={rail.connection} />
@@ -108,14 +120,4 @@
     </Tooltip.Root>
   {/if}
 
-  <Tooltip.Root>
-    <Tooltip.Trigger>
-      {#snippet child({ props })}
-        <Button {...props} variant="ghost" size="icon-sm" onclick={onsettings} aria-label="Settings">
-          <SettingsIcon />
-        </Button>
-      {/snippet}
-    </Tooltip.Trigger>
-    <Tooltip.Content>Settings</Tooltip.Content>
-  </Tooltip.Root>
 </header>
