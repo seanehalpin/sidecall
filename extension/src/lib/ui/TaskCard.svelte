@@ -16,7 +16,7 @@
   }
 </script>
 
-<TaskUI.Root class="task-card" data-status={task.status}>
+<TaskUI.Root class="task-card" data-status={task.status} open={false}>
   <TaskUI.Trigger {title} />
   <TaskUI.Content>
     {#each steps as step, i (i)}

@@ -285,7 +285,7 @@ describe('extension smoke', () => {
     });
 
     it('a pick shows a chip, uploads crop + viewport and sends pick.add', async () => {
-      await panel.getByText('⌥-click elements on the page to point at them').waitFor();
+      await panel.getByLabel('Message').waitFor();
       const before = Date.now();
       await fromPage(await pickMsg('l1'));
       const chip = panel.locator('.tray [data-pick-id="1"]');
@@ -487,7 +487,7 @@ describe('extension smoke', () => {
       // environment (even a same-page loopback stays "new"), so "connected" is a manual check.
       .poll(() => sw.evaluate(() => (globalThis as unknown as { __sidecall: { callLog: { ev: string }[] } }).__sidecall.callLog.some((m) => m.ev === 'answered')), { timeout: 10_000 })
       .toBe(true);
-    await expect.poll(() => panel.locator('.composer').textContent()).toContain('On a call');
+    await panel.locator('header [data-call-state]').waitFor();
     // Reaching listening sends the page in view, screenshot uploaded first.
     const callPage = (await daemon.waitFor('call.page')).payload.page;
     expect(callPage.url.startsWith(appOrigin)).toBe(true);

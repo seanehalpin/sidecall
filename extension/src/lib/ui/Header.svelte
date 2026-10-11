@@ -4,7 +4,6 @@
   import PhoneIcon from '@lucide/svelte/icons/phone';
   import PhoneOffIcon from '@lucide/svelte/icons/phone-off';
   import SettingsIcon from '@lucide/svelte/icons/settings';
-  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils';
@@ -44,13 +43,14 @@
     <Tooltip.Content class="max-w-[320px] break-all whitespace-pre-line">{rail.repo ? `${rail.repo.name}\n${rail.repo.path}` : subtitle}</Tooltip.Content>
   </Tooltip.Root>
 
-  <ConnectionDot status={rail.connection} compact={rail.inCall} />
+  {#if !rail.inCall}
+    <ConnectionDot status={rail.connection} />
+  {/if}
 
   {#if rail.inCall}
     {#if label}
-      <Badge
-        variant="secondary"
-        class="shrink-0 gap-1.5"
+      <span
+        class="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
         data-call-state={rail.callState}
         data-muted={rail.muted}
         aria-live="polite"
@@ -65,7 +65,7 @@
           )}
           aria-hidden="true"
         ></span>{label}
-      </Badge>
+      </span>
     {/if}
     <Tooltip.Root>
       <Tooltip.Trigger>

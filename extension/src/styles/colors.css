@@ -23,7 +23,7 @@
 /* --- Side panel: light ------------------------------------------------------------ */
 :root {
 	/* Text size the whole panel scales from. 16px gives 14px body text. */
-	--sidecall-root-font-size: 14px;
+	--sidecall-root-font-size: 15px;
 
 	--background: oklch(1 0 0); /* panel background */
 	--foreground: oklch(0.148 0.004 228.8); /* main text */
@@ -35,7 +35,7 @@
 	--popover-foreground: oklch(0.148 0.004 228.8);
 
 	/* Brand / accent colour: send button, user-facing highlights, focus, active states. */
-	--primary: oklch(0.52 0.105 223.128);
+	--primary: oklch(21.297% 0.02836 220.123);
 	--primary-foreground: oklch(0.984 0.019 200.873); /* text on --primary */
 
 	/* Secondary buttons and chips. */
@@ -79,11 +79,11 @@
 	--popover: oklch(0.218 0.008 223.9);
 	--popover-foreground: oklch(0.987 0.002 197.1);
 
-	--primary: oklch(0.45 0.085 224.283);
-	--primary-foreground: oklch(0.984 0.019 200.873);
+	--primary: oklch(97.293% 0.00604 224.236);
+	--primary-foreground: oklch(21.458% 0.00459 197.11);
 
 	--secondary: oklch(0.274 0.006 286.033);
-	--secondary-foreground: oklch(0.985 0 0);
+	--secondary-foreground: oklch(0.985 0 0); /* light text on the dark secondary fill */
 	--accent: oklch(0.275 0.011 216.9);
 	--accent-foreground: oklch(0.987 0.002 197.1);
 

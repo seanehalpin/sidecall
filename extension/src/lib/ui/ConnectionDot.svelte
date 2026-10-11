@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Badge } from '$lib/components/ui/badge';
   import { cn } from '$lib/utils';
   import type { ConnectionStatus } from '../rail-state';
 
@@ -17,7 +16,7 @@
   };
 </script>
 
-<Badge variant="outline" class="shrink-0 gap-1.5" role="img" aria-label={labels[status]} data-status={status} title={labels[status]}>
+<span class="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground" role="img" aria-label={labels[status]} data-status={status} title={labels[status]}>
   <span
     class={cn(
       'size-1.5 rounded-full',
@@ -26,5 +25,6 @@
       status === 'offline' && 'bg-muted-foreground',
     )}
   ></span>
-  {#if !compact}{shortLabels[status]}{/if}
-</Badge>
+  <!-- Connected is the normal state: just the dot. Anything else says so. -->
+  {#if !compact && status !== 'connected'}{shortLabels[status]}{/if}
+</span>

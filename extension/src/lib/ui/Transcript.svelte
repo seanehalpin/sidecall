@@ -2,6 +2,13 @@
   import MessageSquareIcon from '@lucide/svelte/icons/message-square';
   import * as Conversation from '$lib/components/ai-elements/conversation';
   import PickChipView from './PickChipView.svelte';
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+
+  /** "Task completed: Title. Long report…" → ["Task completed: Title.", "Long report…"]. */
+  function splitSystem(text: string): [string, string] {
+    const m = /^(.+?[.!?])\s+(\S[\s\S]*)$/.exec(text.trim());
+    return m ? [m[1] ?? text, m[2] ?? ''] : [text, ''];
+  }
   import * as Message from '$lib/components/ai-elements/message';
   import { Shimmer } from '$lib/components/ai-elements/shimmer';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -61,7 +68,7 @@
       {#if entry.role === 'system'}
         {@const task = queuedTask(entry)}
         <div
-          class={cn('entry system', !task && 'text-center text-xs text-muted-foreground')}
+          class={cn('entry system', !task && 'text-xs text-muted-foreground')}
           data-role="system"
           data-turn-id={entry.turnId}
           data-streaming={entry.streaming}
@@ -69,7 +76,19 @@
           {#if task}
             <TaskCard {task} title={entry.text} steps={taskSteps[task.id] ?? []} />
           {:else}
-            {entry.text}
+            {@const [head, rest] = splitSystem(entry.text)}
+            {#if rest}
+              <!-- Collapsed to its first sentence; the worker's full report is one click away. -->
+              <details class="group">
+                <summary class="flex cursor-pointer list-none items-start gap-1.5 hover:text-foreground [&::-webkit-details-marker]:hidden">
+                  <ChevronRightIcon class="mt-px size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+                  <span class="min-w-0">{head}</span>
+                </summary>
+                <p class="mt-1 pl-5 whitespace-pre-wrap">{rest}</p>
+              </details>
+            {:else}
+              <p class="pl-5">{head}</p>
+            {/if}
           {/if}
         </div>
       {:else if entry.role === 'user'}
