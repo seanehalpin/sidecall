@@ -1,5 +1,7 @@
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
+  import { slide } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import { Button } from '$lib/components/ui/button';
   import * as PromptInput from '$lib/components/ai-elements/prompt-input';
@@ -69,17 +71,22 @@
     {#if header}
       <PromptInput.Header>{@render header()}</PromptInput.Header>
     {/if}
-    <PromptInput.Body>
-      <!-- On a call you talk instead: the field greys out and the send button goes. -->
-      <PromptInput.Textarea
-        bind:ref={field}
-        bind:value={text}
-        disabled={disabled || inCall}
-        placeholder={disabled ? 'Connect to a repo to start' : pickedName ? `Change ${pickedName}…` : 'Message...'}
-        aria-label="Message"
-        class="text-sm"
-      />
-    </PromptInput.Body>
+    <!-- On a call you talk instead: the text row slides away (and back when it ends),
+         leaving just the toolbar; the send button goes too. -->
+    {#if !inCall}
+      <div class="sc-composer-input" transition:slide={{ duration: 200, easing: cubicOut }}>
+        <PromptInput.Body>
+          <PromptInput.Textarea
+            bind:ref={field}
+            bind:value={text}
+            {disabled}
+            placeholder={disabled ? 'Connect to a repo' : pickedName ? `Edit` : 'Ask'}
+            aria-label="Message"
+            class="text-sm"
+          />
+        </PromptInput.Body>
+      </div>
+    {/if}
     <PromptInput.Toolbar class="sc-composer-toolbar">
       <div class="flex min-w-0 items-center gap-1">{@render leading?.()}</div>
       <div class="flex shrink-0 items-center gap-1">
