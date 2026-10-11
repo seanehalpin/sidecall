@@ -9,7 +9,6 @@
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils';
   import { callLabel, type RailState } from '../rail-state';
-  import ConnectionDot from './ConnectionDot.svelte';
 
   let {
     rail,
@@ -114,9 +113,8 @@
     </Tooltip.Root>
   </div>
 {:else}
-  <!-- Not on a call: the status dot and the call button, grouped like .sc-call. -->
+  <!-- Not on a call: just the call button (grouped like .sc-call, no background). -->
   <div class="sc-call sc-call-idle flex shrink-0 items-center gap-1">
-    <ConnectionDot status={rail.connection} />
     <Tooltip.Root>
       <Tooltip.Trigger>
         {#snippet child({ props })}

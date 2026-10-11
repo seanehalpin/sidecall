@@ -46,7 +46,7 @@
 
 <ModeWatcher disableHeadScriptInjection />
 <Tooltip.Provider delayDuration={300}>
-  <div class="rail sc-panel flex h-screen flex-col" data-view={view}>
+  <div class="rail sc-panel flex h-screen flex-col" data-connection={rail.connection} data-view={view}>
 
     {#if view === 'main'}
       {#if rail.callError}

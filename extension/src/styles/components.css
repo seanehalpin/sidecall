@@ -61,10 +61,8 @@
 }
 /* Same group when not on a call: status dot + call button. */
 .sc-call-idle {
+	background: transparent;
 	padding: var(--sc-call-idle-padding);
-}
-.sc-call-idle > [data-status] {
-	margin-left: var(--sc-call-idle-dot-inset);
 }
 
 /* Dropdown menus (the repo menu and any others): solid, square-ish, neutral hover. */

@@ -218,11 +218,11 @@ try {
   // --- 4. queue survives a daemon restart ---------------------------------------------
   const tasksBefore = await panel.locator('.queue li, .queue .task').count();
   await stop(daemon.proc);
-  await panel.locator('[data-status="offline"], [data-status="connecting"]').first().waitFor({ timeout: 15000 });
+  await panel.locator('.rail[data-connection="offline"], .rail[data-connection="connecting"]').first().waitFor({ timeout: 15000 });
   daemon = startDaemon(home);
   await daemon.code;
   await sw.evaluate(() => chrome.storage.local.get(null)); // poke the worker
-  await panel.locator('[data-status="connected"]').first().waitFor({ timeout: 60000 });
+  await panel.locator('.rail[data-connection="connected"]').first().waitFor({ timeout: 60000 });
   await panel.waitForTimeout(1000);
   const tasksAfter = await panel.locator('.queue li, .queue .task').count();
   const queueJson = readFileSync(

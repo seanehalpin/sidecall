@@ -143,7 +143,7 @@ describe('extension smoke', () => {
     await panel.getByRole('button', { name: 'Repo menu' }).click();
     await panel.locator('.sc-repo-menu .name').getByText('svelte5-app').waitFor();
     await panel.keyboard.press('Escape');
-    expect(await panel.locator('.composer [data-status]').getAttribute('data-status')).toBe('connected');
+    expect(await panel.locator('.rail').getAttribute('data-connection')).toBe('connected');
   });
 
   it('streams the agent reply, queues a task and approves a blocked step', async () => {
