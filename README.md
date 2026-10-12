@@ -1,8 +1,8 @@
-# Sidecall
+# On it
 
 Prototype by pointing and talking. Open your local web app in Chrome, hold ⌥ and click the elements you mean, and say what you want: "make [1] match the spacing on [2]". An agent in a side panel talks the change through with you, then hands it to Claude Code, which edits your repo in the background while your dev server hot-reloads.
 
-The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.md](docs/PLAN.md).
+The code, commands and folders still use its working name, `sidecall`. The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.md](docs/PLAN.md).
 
 ## Quick start
 
@@ -28,7 +28,7 @@ You need an Apple Silicon Mac, Chrome, [uv](https://docs.astral.sh/uv/), Node 22
 4. To point at something, hold **⌥** and click it (or drag over a region). Refer to it as `[1]`, `[2]`: "make [1] match [2]". **Esc** while holding ⌥ selects the parent.
 5. To talk instead of typing, grant the mic once in the extension's settings, then press the phone button.
 
-More detail is in [Run Sidecall](#run-sidecall) below.
+More detail is in [Run On it](#run-on-it) below.
 
 ## Status
 
@@ -48,10 +48,10 @@ More detail is in [Run Sidecall](#run-sidecall) below.
 - Google Chrome.
 - [uv](https://docs.astral.sh/uv/) (`brew install uv`). It installs Python 3.12 for you.
 - Node 22+ and [pnpm](https://pnpm.io/) 10+.
-- [Claude Code](https://claude.com/claude-code), installed and logged in (`claude` in a terminal). Sidecall runs on your Claude Code login, so changes use your Claude usage.
+- [Claude Code](https://claude.com/claude-code), installed and logged in (`claude` in a terminal). On it runs on your Claude Code login, so changes use your Claude usage.
 - Free local ports: 7823 for the daemon, 5173–5175 for the fixture apps.
 
-## Run Sidecall
+## Run On it
 
 > Start each block from the repo root.
 
@@ -82,7 +82,7 @@ If you're working on the extension itself, run `pnpm dev` instead and load `exte
 1. Start your app's dev server and open it in Chrome on `localhost` (for example a fixture: `cd fixtures/svelte5-app && pnpm install && pnpm dev`).
 2. Click the On it icon. The side panel opens.
 3. Enter the pairing code from step 1.
-4. When it asks which folder the app's code lives in, paste the repo path or click **Choose folder…**. Sidecall remembers it for that `localhost` address.
+4. When it asks which folder the app's code lives in, paste the repo path or click **Choose folder…**. On it remembers it for that `localhost` address.
 
 **4. Ask for a change.** Type, for example, "make the heading on the home page red", and press Enter. The agent confirms what it's going to do and queues a task. Claude Code edits the code in the background, the page hot-reloads, and the panel shows when it's done.
 
