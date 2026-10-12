@@ -80,7 +80,7 @@
             bind:ref={field}
             bind:value={text}
             {disabled}
-            placeholder={disabled ? 'Connect to a repo' : pickedName ? `Edit` : 'Ask'}
+            placeholder={disabled ? 'Connect to a repo' : pickedName ? `Edit` : 'Message'}
             aria-label="Message"
             class="text-sm"
           />

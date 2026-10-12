@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
   import LoaderIcon from '@lucide/svelte/icons/loader-circle';
   import MonitorOffIcon from '@lucide/svelte/icons/monitor-off';
@@ -15,6 +16,7 @@
   import { canSend, railView } from '@/lib/rail-state';
   import Approvals from '@/lib/ui/Approvals.svelte';
   import Composer from '@/lib/ui/Composer.svelte';
+  import Aura from '@/lib/ui/Aura.svelte';
   import CallControls from '@/lib/ui/CallControls.svelte';
   import RepoMenu from '@/lib/ui/RepoMenu.svelte';
   import PickTray from '@/lib/ui/PickTray.svelte';
@@ -136,6 +138,11 @@
           oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
         />
       {/if}
+      <!-- During a call the aura glows behind the (translucent, blurred) message box. -->
+      <div class="sc-composer-wrap relative">
+        {#if rail.inCall}
+          <div class="sc-aura" transition:fade={{ duration: 400 }} aria-hidden="true"><Aura id="sidecall-aura" /></div>
+        {/if}
       <Composer
         bind:this={composer}
         disabled={!sendable}
@@ -148,6 +155,7 @@
         {trailing}
         onsend={(text) => client.send({ type: 'user.text', payload: { text, pickIds: [], page: null } })}
       />
+      </div>
     </div>
   </div>
 </Tooltip.Provider>

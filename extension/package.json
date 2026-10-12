@@ -27,6 +27,7 @@
     "happy-dom": "^20.14.5",
     "json-schema-to-typescript": "^16.0.0",
     "playwright": "1.63.0",
+    "sass": "^1.105.1",
     "shadcn-svelte": "^1.7.0",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.6",

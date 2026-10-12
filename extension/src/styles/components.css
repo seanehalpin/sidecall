@@ -48,6 +48,8 @@
 
 .sc-composer {
 	background: var(--sc-composer-bg);
+	backdrop-filter: blur(var(--sc-composer-blur));
+	-webkit-backdrop-filter: blur(var(--sc-composer-blur));
 	border-color: var(--sc-composer-border);
 	border-radius: var(--sc-composer-radius);
 }
@@ -88,4 +90,29 @@
 [data-slot='dropdown-menu-item']:focus *,
 [data-slot='dropdown-menu-item'][data-highlighted] * {
 	color: inherit;
+}
+
+/* The live-call aura: Aura.svelte glowing behind the message box while on a call. */
+.sc-composer-wrap .composer {
+	position: relative;
+	z-index: 1;
+}
+.sc-aura {
+	position: absolute;
+	left: var(--sc-aura-inset-x);
+	right: var(--sc-aura-inset-x);
+	bottom: var(--sc-aura-offset-y);
+	height: var(--sc-aura-height);
+	z-index: 0;
+	pointer-events: none;
+	opacity: var(--sc-aura-opacity);
+	filter: blur(var(--sc-aura-blur));
+	-webkit-mask-image: radial-gradient(closest-side, #000 40%, transparent);
+	mask-image: radial-gradient(closest-side, #000 40%, transparent);
+}
+.sc-aura div.canvas,
+.sc-aura div.canvas-holder {
+	display: block;
+	width: 100%;
+	height: 100%;
 }

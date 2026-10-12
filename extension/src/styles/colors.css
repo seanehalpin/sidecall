@@ -144,6 +144,13 @@
   --sc-call-padding: 2px 2px 2px 16px;
   --sc-call-idle-padding: 2px; /* not on a call: just the call button, no background */
 
+  /* Live-call aura behind the message box */
+  --sc-aura-height: 120px;
+  --sc-aura-inset-x: 8%;
+  --sc-aura-offset-y: -24px; /* below 0 lets it spill past the box's bottom edge */
+  --sc-aura-blur: 24px;
+  --sc-aura-opacity: 0.9;
+
   /* Dropdown menus */
   --sc-menu-bg: var(--background); /* same as the panel; the border separates it */
   --sc-menu-fg: var(--foreground);
@@ -156,7 +163,8 @@
   /* Approval cards and composer */
   --sc-approval-bg: var(--card);
   --sc-approval-border: var(--border);
-  --sc-composer-bg: var(--card);
+  --sc-composer-bg: color-mix(in srgb, var(--card) 72%, transparent); /* translucent so the aura shows through */
+  --sc-composer-blur: 16px;
   --sc-composer-border: var(--border);
   --sc-composer-radius: 12px;
 }
