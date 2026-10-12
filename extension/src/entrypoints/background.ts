@@ -712,7 +712,7 @@ export default defineBackground(() => {
         url: OFFSCREEN_PATH,
         // Never AUDIO_PLAYBACK: it closes the document after 30 s of silence.
         reasons: ['USER_MEDIA' as Browser.offscreen.Reason, 'WEB_RTC' as Browser.offscreen.Reason],
-        justification: 'Holds the microphone and the WebRTC audio connection for a Wilco voice call.',
+        justification: 'Holds the microphone and the WebRTC audio connection for a On it voice call.',
       });
     })();
     try {
@@ -1052,7 +1052,7 @@ export default defineBackground(() => {
     if (typeof win === 'number') lastWindowId = win;
     // A restarted worker has lost its socket, and the daemon ended the call with it.
     if (state.inCall) {
-      state = applyLocalEvent(state, { kind: 'callEnded', error: { code: 'call_lost', message: 'The call ended when Wilco restarted.' } });
+      state = applyLocalEvent(state, { kind: 'callEnded', error: { code: 'call_lost', message: 'The call ended when On it restarted.' } });
     }
     state = { ...state, callState: 'idle' };
     void closeOffscreen();

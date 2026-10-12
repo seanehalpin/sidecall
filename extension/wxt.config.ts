@@ -26,7 +26,7 @@ export default defineConfig({
     },
   }),
   manifest: {
-    name: 'Wilco',
+    name: 'On it',
     description: 'Prototype by conversation: point, talk, and let Claude Code edit your local app.',
     key: EXTENSION_KEY,
     // offscreen: the call document holding the mic and WebRTC (SPEC §5.5).
@@ -35,6 +35,6 @@ export default defineConfig({
     // <all_urls> is what chrome.tabs.captureVisibleTab needs for the page-context
     // screenshot on every turn (activeTab only lasts until the next navigation).
     host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', '<all_urls>'],
-    action: { default_title: 'Open Wilco' },
+    action: { default_title: 'On it' },
   },
 });

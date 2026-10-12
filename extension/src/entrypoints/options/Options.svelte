@@ -88,7 +88,7 @@
 <ModeWatcher disableHeadScriptInjection />
 <Tooltip.Provider>
 <main class="mx-auto flex min-h-full max-w-xl flex-col gap-4 bg-background px-4 py-8 text-foreground">
-  <h1 class="m-0 font-heading text-xl font-semibold">Wilco settings</h1>
+  <h1 class="m-0 font-heading text-xl font-semibold">On it settings</h1>
 
   <Card.Root>
     <Card.Header>
