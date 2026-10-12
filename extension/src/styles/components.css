@@ -106,11 +106,18 @@
 	z-index: 0;
 	pointer-events: none;
 	opacity: var(--sc-aura-opacity);
-	filter: blur(var(--sc-aura-blur));
-	-webkit-mask-image: radial-gradient(closest-side, #000 40%, transparent);
-	mask-image: radial-gradient(closest-side, #000 40%, transparent);
+	/* Clip the oversized, blurred canvas so the sides stay solid (no feathered indent),
+	   and fade it out towards the top only. */
+	overflow: hidden;
+	-webkit-mask-image: linear-gradient(to top, #000 35%, transparent);
+	mask-image: linear-gradient(to top, #000 35%, transparent);
 }
-.sc-aura div.canvas,
+.sc-aura div.canvas {
+	position: absolute;
+	inset: calc(var(--sc-aura-blur) * -2);
+	display: block;
+	filter: blur(var(--sc-aura-blur));
+}
 .sc-aura div.canvas-holder {
 	display: block;
 	width: 100%;
