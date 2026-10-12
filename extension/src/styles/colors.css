@@ -146,10 +146,10 @@
 
   /* Live-call aura behind the message box */
   --sc-aura-height: 120px;
-  --sc-aura-inset-x: 0px;
-  --sc-aura-offset-y: 0px; /* negative lets it spill below the box */
+  --sc-aura-inset-x: 0px; /* 0 = flush with the panel edges */
+  --sc-aura-offset-y: 0px; /* from the panel's bottom edge */
   --sc-aura-blur: 24px;
-  --sc-aura-opacity: 0.4;
+  --sc-aura-opacity: 0.32;
 
   /* Dropdown menus */
   --sc-menu-bg: var(--background); /* same as the panel; the border separates it */
@@ -163,7 +163,8 @@
   /* Approval cards and composer */
   --sc-approval-bg: var(--card);
   --sc-approval-border: var(--border);
-  --sc-composer-bg: oklch(from var(--background) l c h / 0.6); /* the panel colour, see-through, so the aura shows */
+  --sc-composer-bg: var(--card); /* normally solid */
+  --sc-composer-bg-call: oklch(from var(--background) l c h / 0.6); /* on a call: see-through so the aura shows */
   --sc-composer-blur: 16px;
   --sc-composer-border: var(--border);
   --sc-composer-radius: 12px;

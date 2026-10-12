@@ -124,7 +124,11 @@
       </div>
     {/if}
 
-    <div class="flex flex-none flex-col gap-2 pl-4 pb-4 pr-4">
+    <div class="sc-bottom relative flex flex-none flex-col gap-2 pl-4 pb-4 pr-4">
+      <!-- During a call the aura glows behind the message box, flush with the panel's edges. -->
+      {#if rail.inCall}
+        <div class="sc-aura" transition:fade={{ duration: 400 }} aria-hidden="true"><Aura id="sidecall-aura" /></div>
+      {/if}
       {#if view === 'main'}
         <Approvals
           approvals={rail.approvals}
@@ -138,11 +142,7 @@
           oncancel={(id) => client.send({ type: 'task.cancel', payload: { id } })}
         />
       {/if}
-      <!-- During a call the aura glows behind the (translucent, blurred) message box. -->
       <div class="sc-composer-wrap relative">
-        {#if rail.inCall}
-          <div class="sc-aura" transition:fade={{ duration: 400 }} aria-hidden="true"><Aura id="sidecall-aura" /></div>
-        {/if}
       <Composer
         bind:this={composer}
         disabled={!sendable}

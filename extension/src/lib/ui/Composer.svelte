@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="composer flex flex-col gap-2">
+<div class="composer flex flex-col gap-2" data-in-call={inCall}>
   {#if suggestions.length > 0 && !disabled}
     <Suggestions>
       {#each suggestions as s (s)}

@@ -48,8 +48,6 @@
 
 .sc-composer {
 	background: var(--sc-composer-bg);
-	backdrop-filter: blur(var(--sc-composer-blur));
-	-webkit-backdrop-filter: blur(var(--sc-composer-blur));
 	border-color: var(--sc-composer-border);
 	border-radius: var(--sc-composer-radius);
 }
@@ -92,10 +90,17 @@
 	color: inherit;
 }
 
+/* On a call the box goes see-through and blurs the aura behind it. */
+.composer[data-in-call='true'] .sc-composer {
+	background: var(--sc-composer-bg-call);
+	backdrop-filter: blur(var(--sc-composer-blur));
+	-webkit-backdrop-filter: blur(var(--sc-composer-blur));
+}
+
 /* The live-call aura: Aura.svelte glowing behind the message box while on a call. */
-.sc-composer-wrap .composer {
+.sc-bottom > :not(.sc-aura) {
 	position: relative;
-	z-index: 1;
+	z-index: 1; /* everything in the bottom area sits above the aura */
 }
 .sc-aura {
 	position: absolute;

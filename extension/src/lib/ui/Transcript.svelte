@@ -83,7 +83,8 @@
               <summary class="flex cursor-pointer list-none items-center p-2 gap-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
                 {#if isTaskOutcome(entry)}<ClaudeMark size={14} class="mt-0.5" />{/if}
                 <span class="min-w-0 flex-1">{head}</span>
-                <ChevronDownIcon class="mt-px size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+                <!-- Only on hover, or while open: less clutter in the chat. -->
+                <ChevronDownIcon class="mt-px size-3.5 shrink-0 opacity-0 transition-[opacity,transform] group-hover:opacity-100 group-open:rotate-180 group-open:opacity-100" />
               </summary>
               <div class="sc-system-detail mt-2 flex flex-col gap-3 p-3">
                 {#if rest}<p class="whitespace-pre-wrap text-foreground">{rest}</p>{/if}
