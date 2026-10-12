@@ -2,7 +2,7 @@
 // ⌥ is held (or while one of our own alt-drags is in flight), so page clicks are untouched.
 import type { Rect } from '../protocol.gen';
 import type { Overlay } from './overlay';
-import { currentOf, moveDown, moveUp, originOf, startPath, type PathStack } from './traversal';
+import { currentOf, moveUp, originOf, startPath, type PathStack } from './traversal';
 import { guard, isDrag, rectFromPoints, rectOf } from './util';
 
 export type PickTarget = { kind: 'element'; el: Element } | { kind: 'region'; rect: Rect };
@@ -37,6 +37,9 @@ export function chooseTarget<T>(stack: readonly T[], areaOf: (el: T) => number, 
   return first;
 }
 
+/** How far the pointer must move after an Esc climb before the selection refocuses. */
+const REFOCUS_PX = 4;
+
 const INTERCEPTED = ['pointerdown', 'pointerup', 'mouseup', 'click', 'dblclick', 'auxclick'] as const;
 
 /** Tag.class fallback label. */
@@ -58,6 +61,8 @@ export class InputController {
   private labelToken = 0;
   private drag: { x0: number; y0: number; target: Element | null; active: boolean } | null = null;
   private swallowClickUntil = 0;
+  /** Where the pointer was when Esc last climbed to a parent. */
+  private climbedAt: { x: number; y: number } | null = null;
 
   constructor(private readonly deps: InputDeps) {}
 
@@ -110,13 +115,17 @@ export class InputController {
       if (this.last) this.hoverAt(this.last.x, this.last.y);
       return;
     }
-    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (e.altKey || this.altDown) && this.path && this.shown) {
+    // ⌥ held over an element: Esc climbs to the parent, as far as the top of the page.
+    // Moving the mouse (or picking) goes back to the element under the cursor.
+    if (e.key === 'Escape' && (e.altKey || this.altDown) && this.path && this.shown) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      this.path = e.key === 'ArrowUp' ? moveUp(this.path, parentOfElement) : moveDown(this.path);
+      this.path = moveUp(this.path, parentOfElement);
       this.show(currentOf(this.path));
+      this.climbedAt = this.last;
       return;
     }
+    // Esc without ⌥: clear the current picks.
     if (e.key === 'Escape' && (this.shown || this.deps.hasLivePins())) {
       this.deps.onEscape();
       this.clearHover();
@@ -142,6 +151,11 @@ export class InputController {
     }
     if (e.altKey) {
       if (!this.altDown) this.setAlt(true);
+      // After climbing with Esc, a real move (not hand jitter) refocuses on what's under the cursor.
+      if (this.climbedAt && Math.hypot(e.clientX - this.climbedAt.x, e.clientY - this.climbedAt.y) > REFOCUS_PX) {
+        this.climbedAt = null;
+        this.path = null;
+      }
       this.hoverAt(e.clientX, e.clientY);
     } else if (this.altDown || this.shown) {
       this.setAlt(false);

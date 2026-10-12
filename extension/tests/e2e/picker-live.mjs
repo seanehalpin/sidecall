@@ -264,7 +264,7 @@ async function runFixture(fx, idx, ctx, tmp) {
     check(label('overlay-set hides/shows and acks'), ack?.reqId === 'r1' && ack.visible === false && hidden && ack2?.reqId === 'r2' && ack2.visible === true);
     await page.evaluate(() => window.scrollTo(0, 0));
 
-    // ---- ↑ traversal moves to the parent (and the page doesn't scroll)
+    // ---- Esc (with ⌥ held) climbs to the parent; the page doesn't react
     {
       const b = await box(page, '[data-testid=card-title]', 1);
       const [cx, cy] = center(b);
@@ -273,15 +273,13 @@ async function runFixture(fx, idx, ctx, tmp) {
       await page.mouse.move(cx, cy - 40 + 3);
       await page.mouse.move(cx, cy - 40, { steps: 3 });
       const label0 = await until(async () => page.evaluate(() => document.getElementById('sidecall-picker-root').shadowRoot.querySelector('[data-role=hover-label]').textContent), 3000);
-      await page.keyboard.press('ArrowUp');
-      await page.keyboard.press('ArrowUp');
-      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Escape'); // h2 -> header
       await sleep(100);
       const scrollY = await page.evaluate(() => window.scrollY);
       await page.mouse.click(cx, cy - 40);
       await page.keyboard.up('Alt');
       const pk = await take(page, 'pick');
-      check(label('↑↑↓ traversal: pick lands on the parent (header), page did not scroll'), pk?.draft.element?.tag === 'header' && scrollY === 40, `tag ${pk?.draft.element?.tag} scrollY ${scrollY}`);
+      check(label('Esc traversal: pick lands on the parent (header), page did not scroll'), pk?.draft.element?.tag === 'header' && scrollY === 40, `tag ${pk?.draft.element?.tag} scrollY ${scrollY}`);
       check(label('hover label shows component + file:line'), /Card\s+.*Card\.(svelte|tsx):\d+/.test(label0 ?? ''), label0 ?? '');
       await page.evaluate(() => window.scrollTo(0, 0));
       if (pk) {

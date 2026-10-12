@@ -81,7 +81,7 @@ export class Overlay {
 
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly HINT_HTML =
-    '<b>⌥ Wilco</b> &nbsp;click to pick &middot; drag for a region &middot; ↑ ↓ parent / child &middot; Esc clears';
+    '<b>⌥ Wilco</b> &nbsp;click to pick &middot; drag for a region &middot; Esc selects the parent';
 
   constructor(private readonly isActive: () => boolean = () => true) {
     this.host = document.createElement('div');
