@@ -586,6 +586,7 @@ export interface Task {
   lastEvent: string | null;
   page: PageContext | null;
   pickIds: number[];
+  request: string | null;
   startedAt: number | null;
   status: 'queued' | 'running' | 'blocked' | 'completed' | 'failed' | 'cancelled';
   summary: string | null;

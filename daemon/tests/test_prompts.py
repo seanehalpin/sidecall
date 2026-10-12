@@ -44,8 +44,11 @@ def test_render_worker_prompt_has_every_section() -> None:
         out_of_scope=["other headings"],
         notes="Use the existing CSS block.",
     )
+    task.request = "make the big heading red\nactually a darker red"
     prompt = render_worker_prompt(task)
     assert prompt.startswith("# Task: Red heading")
+    assert "> make the big heading red\n> actually a darker red" in prompt
+    assert prompt.index("What the user said") < prompt.index("Goal:")
     for expected in [
         "Goal: Make the home page heading red",
         "- src/routes/+page.svelte:10 — the h1",
@@ -257,7 +260,7 @@ def test_render_talker_turn_with_page() -> None:
 def test_render_worker_prompt_page_section() -> None:
     task = make_task("Magenta dropdown")
     assert "Page the user was looking at" not in render_worker_prompt(task)
-    assert "Scope the change" not in render_worker_prompt(task)
+    assert "Prefer changes that only affect" not in render_worker_prompt(task)
     task.page = _page()
     prompt = render_worker_prompt(task)
     section = prompt.split("Page the user was looking at:\n", 1)[1].split("\n\n", 1)[0]
@@ -269,7 +272,7 @@ def test_render_worker_prompt_page_section() -> None:
     ]
     assert "A screenshot of what the user saw is attached." in prompt
     instructions = prompt.split("Instructions:\n", 1)[1]
-    assert instructions.startswith("- Scope the change to the page above unless the brief")
+    assert instructions.startswith("- Prefer changes that only affect the page above.")
     assert "screenshot" not in render_worker_prompt(task, screenshot_attached=False)
     task.page = _page(None)
     assert "screenshot" not in render_worker_prompt(task)

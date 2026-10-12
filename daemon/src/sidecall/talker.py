@@ -312,6 +312,7 @@ class ClaudeTalker:
         self._in_turn = False
         self._abort = False
         self._connect_lock = asyncio.Lock()
+        self._model: str | None = None
         self.timings: list[TurnTiming] = []
 
     def options(self) -> ClaudeAgentOptions:
@@ -336,11 +337,20 @@ class ClaudeTalker:
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
                 self._client = client
+                self._model = self.session.talker_model
             return self._client
+
+    async def _use_model(self, client: ClaudeSDKClient, spoken: bool) -> None:
+        """Typed turns use the talker model and spoken ones the (faster) call model. One
+        session serves both, so switching keeps the conversation."""
+        model = self.session.call_talker_model if spoken else self.session.talker_model
+        if model != self._model:
+            await client.set_model(model)
+            self._model = model
 
     async def warm(self) -> None:
         """Connect ahead of the first turn (a voice call starting)."""
-        await self._ensure_client()
+        await self._use_model(await self._ensure_client(), spoken=True)
 
     async def reply(
         self,
@@ -369,6 +379,7 @@ class ClaudeTalker:
 
         try:
             client = await self._ensure_client()
+            await self._use_model(client, spoken)
             t0 = time.perf_counter()
             await client.query(sdk_prompt(prompt, image, extra_images))
             if self._abort:  # interrupted while connecting or sending

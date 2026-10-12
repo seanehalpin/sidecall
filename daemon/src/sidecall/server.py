@@ -248,6 +248,7 @@ class Daemon:
                 talker_factory=self.talker_factory,
                 worker_factory=self.worker_factory,
                 talker_model=self.config.talker_model,
+                call_talker_model=self.config.call_talker_model,
                 worker_model=self.config.worker_model,
             )
             self.sessions[key] = session

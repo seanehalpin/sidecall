@@ -79,26 +79,45 @@ mean ("the dropdown", "this card"), and prefer changing what's on this page.
 - Some turns have no page line (the user isn't on the app's tab). Then work from the code \
 and their words alone: never ask the user to show or describe the page, and never wait \
 for a screenshot.
-- If the change would touch a shared component used in many places (design-system \
-components, layouts, global styles) and the user didn't say "everywhere", ask one short \
-question first, like "Just on this page, or everywhere?", then dispatch.
+- If the change belongs in a shared component used beyond this page (a design-system or \
+ui component, a layout, global styles) and the user didn't say "everywhere" or "just \
+here", confirm first with one short question, like "That's the shared Card, so it'd \
+change everywhere. OK, or just here?" Picks' source files and components usually tell \
+you; if you're unsure, one quick Grep for the component name is fine. Don't ask about \
+page files, or about repeated instances on this page (those go in their template).
+- Write the answer into the brief's changes, for example "Change the shared Card \
+component (user confirmed: everywhere)" or "Only on this page; don't change the shared \
+Card".
 - Put the page URL and route, and what the user is looking at, into the brief.
 """
 
 WORKER_SYSTEM_APPEND = """\
 You are running as Sidecall's background worker. Tasks arrive as briefs written by \
-another agent who talked with the user. The user is watching the result live in their \
-browser; their dev server hot-reloads on save.
-Rules:
-- Make the requested change and keep it minimal. Don't refactor unrelated code.
+another agent who talked with the user, together with the user's own words. The user is \
+watching the result live in their browser; their dev server hot-reloads on save.
+
+How to work:
+- The user's words are the source of truth; the brief is a summary of them. Where they \
+differ, or the brief leaves something out, follow the user.
+- Understand the request before editing: read the code involved and how it's used. Then \
+do the whole job properly, however many files it takes. Don't stop at the first edit that \
+looks plausible.
+- Before finishing, check your work: re-read what you changed, go through the brief's \
+acceptance criteria one by one, and run the project's type check or lint if it has a \
+quick one. Fix what you find.
+- Stay on task: don't refactor or restyle code the request doesn't need.
+- Briefs say which page the user was looking at. Prefer changes that only affect that \
+page. Edit a shared component, layout or global style when the brief says the user \
+confirmed it, or when the pick is one of several repeated instances (edit their \
+template). If the job turns out to need a shared change the brief doesn't settle, \
+prefer a scoped way to do it (a prop, variant or class at the call site) when that's \
+clean; otherwise make the shared change and say so in your summary.
 - Never run git push. Don't commit unless the brief asks for it.
 - Don't start, restart or stop dev servers.
 - If a step is denied, continue without it if you can, and mention it in your summary.
-- Finish with a one to three sentence plain-text summary of what you changed.
-- Briefs say which page the user was looking at. Scope the change to that page unless \
-the brief says otherwise; don't change shared components, layouts or global styles used \
-elsewhere without being asked. The exception is the component or template that renders a \
-picked element: when a pick is one of several repeated instances, edit that shared template.
+- If you couldn't do part of the request, say exactly what's left.
+- Finish with a short plain-text summary for the user: one to three sentences on what \
+changed. Keep the summary brief; that's for the user, not a limit on the work.
 """
 
 UNDO_BRIEF = Brief(
@@ -311,7 +330,14 @@ def render_worker_prompt(
     """The worker's prompt for one task. `screenshot_attached` defaults to whether the
     task's page has a screenshot ref; pass False when the image couldn't be loaded."""
     brief = task.brief
-    lines: list[str] = [f"# Task: {brief.title}", "", f"Goal: {brief.goal}", ""]
+    lines: list[str] = [f"# Task: {brief.title}", ""]
+    if task.request:
+        lines += [
+            "What the user said (the source of truth; the brief below summarises it):",
+            *(f"> {line}" for line in task.request.splitlines()),
+            "",
+        ]
+    lines += [f"Goal: {brief.goal}", ""]
     lines += _section("Targets", [render_target(t) for t in brief.targets])
     lines += _section("Changes", brief.changes)
     lines += _section("Acceptance criteria", brief.acceptance_criteria)
@@ -345,25 +371,27 @@ def render_worker_prompt(
     lines += ["Instructions:"]
     if page is not None:
         lines.append(
-            "- Scope the change to the page above unless the brief says otherwise. Don't "
-            "change shared components, layouts or global styles used on other pages "
-            "unless the brief asks for that."
+            "- Prefer changes that only affect the page above. Change shared components, "
+            "layouts or global styles when the brief says the user confirmed it; otherwise "
+            "find a scoped way, or make the shared change and say so in your summary."
         )
     if picks:
         lines += [
             "- Start from the picked elements' source locations: open the file, find the "
-            "element at that line, and edit there. If a source is unknown, search for the "
-            "component name, class names or text shown above.",
+            "element at that line, and work out from there. If a source is unknown, search "
+            "for the component name, class names or text shown above.",
             "- A pick marked 'repeated N×' (N > 1) is one of several instances rendered by "
             "the same template. Edit the template/component that renders them all, not one "
             "copy, unless the brief says to change only that instance.",
             "- Don't change unrelated instances, components or pages.",
         ]
     lines += [
-        "- Make the change described above. Keep it minimal and focused on the brief.",
+        "- Do everything the user asked, then check it against the acceptance criteria "
+        "before you finish.",
         "- Never run git push.",
         "- Don't start dev servers; the user's dev server is already running and hot-reloads.",
-        "- When done, reply with a 1-3 sentence plain-text summary of what changed.",
+        "- When done, reply with a 1-3 sentence plain-text summary of what changed, and "
+        "anything you couldn't do.",
     ]
     return "\n".join(lines)
 

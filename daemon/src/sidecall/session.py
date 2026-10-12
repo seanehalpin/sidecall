@@ -120,6 +120,8 @@ MAX_TURN_IMAGES = 6
 """Images per talker turn, the page screenshot included."""
 MAX_WORKER_PICKS_WITH_VIEWPORT = 6
 MAX_WORKER_IMAGES = 20
+# User turns kept for the next task's "what the user said" (older ones are dropped).
+MAX_SAID_TURNS = 8
 
 
 TalkerFactory = Callable[["RepoSession"], Talker]
@@ -144,10 +146,13 @@ class RepoSession:
         worker_factory: WorkerFactory,
         talker_model: str | None = None,
         worker_model: str | None = None,
+        call_talker_model: str | None = None,
     ) -> None:
         self.repo_path = repo_path
         self.dirs = RepoDirs.create(home, repo_path)
         self.talker_model = talker_model
+        # Spoken turns; None means the same model as typed ones.
+        self.call_talker_model = call_talker_model or talker_model
         self.worker_model = worker_model
         self._emit = emit
         self._talker_factory = talker_factory
@@ -182,6 +187,9 @@ class RepoSession:
         # Tasks dispatched during that turn, by normalised title: a model that calls
         # dispatch_task twice for one request (seen with haiku) gets the first task back.
         self._turn_dispatched: dict[str, Task] = {}
+        # What the user has said since the last hand-over, passed to the worker verbatim so
+        # it isn't working only from the talker's summary.
+        self._said: list[str] = []
         self._unseen: list[str] = []
         self._cancel_requested: set[str] = set()
         self._wake = asyncio.Event()
@@ -349,6 +357,7 @@ class RepoSession:
     ) -> asyncio.Task[None]:
         """Record the user's text now and run the talker turn in the background."""
         self._add_transcript("user", text, pick_ids=pick_ids)
+        self._hear(text)
         refs = self.picks.resolve(pick_ids or [])
         task = asyncio.create_task(self._user_turn(text, page, refs))
         self._bg.add(task)
@@ -364,6 +373,14 @@ class RepoSession:
                 await self._talker.interrupt()
         async with self._talker_lock:
             await self._run_talker_turn(text, page, refs)
+
+    def _hear(self, text: str, *, replace_last: bool = False) -> None:
+        """Remember a user turn for the next task. A continued voice turn carries the
+        merged text, so it replaces the turn it continues."""
+        if replace_last and self._said:
+            self._said.pop()
+        if text.strip():
+            self._said = [*self._said, text.strip()][-MAX_SAID_TURNS:]
 
     def _take_notes(self) -> list[str]:
         """Unseen system notes for the next talker turn; the announcer drops what they
@@ -470,6 +487,7 @@ class RepoSession:
     ) -> AsyncGenerator[str, None]:
         """The talker's reply to a spoken turn, streamed for TTS. Same client, notes,
         picks and crops as a typed turn; the transcript is the call's job."""
+        self._hear(text, replace_last=continuation)
         refs = self.picks.resolve(pick_ids)
         picks = [r for r in refs if isinstance(r, Pick)]
         page = self._voice_page(picks)
@@ -587,6 +605,8 @@ class RepoSession:
             self._add_transcript("system", f"The talker hit an error: {exc}")
             return None
         finally:
+            if self._turn_dispatched:
+                self._said = []
             self._talker_busy = False
             self._turn_page = None
             self._turn_picks = []
@@ -600,7 +620,8 @@ class RepoSession:
         key = " ".join(brief.title.lower().split())
         if key in self._turn_dispatched:
             return self._turn_dispatched[key]
-        task = self._enqueue(brief, self._turn_page, self._dispatch_picks(brief))
+        request = "\n".join(self._said) or None
+        task = self._enqueue(brief, self._turn_page, self._dispatch_picks(brief), request)
         if self._talker_busy:
             self._turn_dispatched[key] = task
         return task
@@ -618,7 +639,13 @@ class RepoSession:
                 out.setdefault(i, pick)
         return list(out.values())
 
-    def _enqueue(self, brief: Brief, page: PageContext | None, picks: Sequence[Pick] = ()) -> Task:
+    def _enqueue(
+        self,
+        brief: Brief,
+        page: PageContext | None,
+        picks: Sequence[Pick] = (),
+        request: str | None = None,
+    ) -> Task:
         brief = normalise_brief(brief, self.repo_path)
         task = Task(
             id=_new_id(),
@@ -627,6 +654,7 @@ class RepoSession:
             created_at=_now_ms(),
             pick_ids=[p.id for p in picks],
             page=page.model_copy(deep=True) if page is not None else None,
+            request=request,
         )
         if picks:
             # Snapshot now: later picks.clear or id reuse mustn't change a queued task.

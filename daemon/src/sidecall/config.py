@@ -16,7 +16,10 @@ import tomli_w
 DEFAULT_PORT = 7823
 # ID of the key pinned in extension/wxt.config.ts (SPEC §6.1, §9.1).
 DEFAULT_EXTENSION_ID = "kcjkimilmanlonlplfancfpoekkphjhb"
-DEFAULT_TALKER_MODEL = "haiku"
+# The talker answers typed turns with a stronger model, and spoken ones with a fast one:
+# on a call, time to first word matters more than depth (SPEC §6.3).
+DEFAULT_TALKER_MODEL = "sonnet"
+DEFAULT_CALL_TALKER_MODEL = "haiku"
 
 
 def sidecall_home() -> Path:
@@ -44,6 +47,7 @@ class Config:
     token: str = ""
     extension_id: str = DEFAULT_EXTENSION_ID
     talker_model: str | None = DEFAULT_TALKER_MODEL
+    call_talker_model: str | None = DEFAULT_CALL_TALKER_MODEL
     worker_model: str | None = None
     repos: dict[str, str] = field(default_factory=dict[str, str])
     path: Path = field(default_factory=lambda: sidecall_home() / "config.toml")
@@ -65,6 +69,7 @@ class Config:
             token=str(data.get("token", "")),
             extension_id=str(data.get("extension_id", DEFAULT_EXTENSION_ID)),
             talker_model=_opt_str(data.get("talker_model", DEFAULT_TALKER_MODEL)),
+            call_talker_model=_opt_str(data.get("call_talker_model", DEFAULT_CALL_TALKER_MODEL)),
             worker_model=_opt_str(data.get("worker_model")),
             repos={str(k): str(v) for k, v in raw_repos.items()},
             path=path,
@@ -80,9 +85,12 @@ class Config:
             "token": self.token,
             "extension_id": self.extension_id,
         }
-        # TOML has no null: an unset model is simply omitted (= CLI default).
-        if self.talker_model:
+        # Models are written only when they differ from the default, so a changed default
+        # reaches existing installs. (TOML has no null, so "CLI default" can't be saved.)
+        if self.talker_model and self.talker_model != DEFAULT_TALKER_MODEL:
             data["talker_model"] = self.talker_model
+        if self.call_talker_model and self.call_talker_model != DEFAULT_CALL_TALKER_MODEL:
+            data["call_talker_model"] = self.call_talker_model
         if self.worker_model:
             data["worker_model"] = self.worker_model
         data["repos"] = dict(self.repos)

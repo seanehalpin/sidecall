@@ -29,11 +29,13 @@ def test_config_first_run_creates_token(tmp_path: Path) -> None:
     assert len(cfg.token) > 30
     assert cfg.port == 7823
     assert cfg.extension_id == DEFAULT_EXTENSION_ID
-    assert cfg.talker_model == "haiku"
+    assert cfg.talker_model == "sonnet"
+    assert cfg.call_talker_model == "haiku"
     assert cfg.worker_model is None
     data = tomllib.loads((tmp_path / "config.toml").read_text())
     assert data["token"] == cfg.token
     assert "worker_model" not in data
+    assert "talker_model" not in data  # defaults aren't written, so they can change
     assert (tmp_path / "config.toml").stat().st_mode & 0o077 == 0
     # stable across loads
     assert Config.load(tmp_path).token == cfg.token

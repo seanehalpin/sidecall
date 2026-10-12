@@ -21,6 +21,7 @@ export function task(id: string, patch: Partial<Task> = {}): Task {
     error: null,
     lastEvent: null,
     page: null,
+    request: null,
     pickIds: [],
     ...patch,
   };

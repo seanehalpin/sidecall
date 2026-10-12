@@ -400,6 +400,7 @@ def test_text_turn_dispatch_and_completion(client: TestClient, config: Config, r
         i = types.index("task.created")
         assert types[i : i + 3] == ["task.created", "queue.state", "transcript.final"]
         task_id = seen[i]["payload"]["id"]
+        assert seen[i]["payload"]["request"] == "make it red"
         assert seen[i + 2]["payload"] == {
             **seen[i + 2]["payload"],
             "role": "system",
@@ -435,6 +436,22 @@ def test_text_turn_dispatch_and_completion(client: TestClient, config: Config, r
         assert [t["status"] for t in state["tasks"]] == ["completed"]
         roles = [e["role"] for e in state["transcript"]]
         assert roles[:4] == ["user", "system", "agent", "system"]
+
+
+def test_task_gets_what_was_said_since_the_last_hand_over(
+    client: TestClient, config: Config, repo: Path
+) -> None:
+    ws = bound(client, config, repo)
+    try:
+        send(ws, "user.text", {"text": "make it red", "pickIds": []})
+        until(ws, "task.created")
+        send(ws, "user.text", {"text": "chat", "pickIds": []})
+        until(ws, "transcript.final", lambda m: m["payload"]["role"] == "agent")
+        send(ws, "user.text", {"text": "now blue", "pickIds": []})
+        created, _ = until(ws, "task.created")
+        assert created["payload"]["request"] == "chat\nnow blue"
+    finally:
+        ws.__exit__(None, None, None)
 
 
 def test_agent_turn_events_order(client: TestClient, config: Config, repo: Path) -> None:

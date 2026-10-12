@@ -1923,6 +1923,18 @@
           "title": "Pickids",
           "type": "array"
         },
+        "request": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request"
+        },
         "startedAt": {
           "anyOf": [
             {
@@ -1978,7 +1990,8 @@
         "error",
         "lastEvent",
         "pickIds",
-        "page"
+        "page",
+        "request"
       ],
       "title": "Task",
       "type": "object"

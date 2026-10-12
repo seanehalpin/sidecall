@@ -99,6 +99,8 @@ class Task(Model):
     pick_ids: list[int] = Field(default_factory=list[int])
     page: PageContext | None = None
     """The page of the user turn that dispatched this task."""
+    request: str | None = None
+    """What the user said since the previous hand-over, verbatim (one utterance per line)."""
 
 
 # --- Transcript ---------------------------------------------------------------
