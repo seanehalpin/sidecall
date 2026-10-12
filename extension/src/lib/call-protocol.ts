@@ -73,7 +73,7 @@ export const ICE_GATHER_TIMEOUT_MS = 2_000;
 export function micErrorFor(err: unknown): { code: CallErrorCode; message: string } {
   const name = err instanceof Error || (err && typeof err === 'object' && 'name' in err) ? String((err as { name: unknown }).name) : '';
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return { code: 'mic_permission', message: 'Microphone not granted. Grant it in Sidecall settings, then start the call again.' };
+    return { code: 'mic_permission', message: 'Microphone not granted. Grant it in Wilco settings, then start the call again.' };
   }
   if (name === 'NotFoundError' || name === 'OverconstrainedError') {
     return { code: 'mic_unavailable', message: 'No microphone found.' };

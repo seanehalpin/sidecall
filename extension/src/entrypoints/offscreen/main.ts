@@ -66,7 +66,7 @@ async function start(): Promise<void> {
   // The offscreen document can't show a permission prompt: without the options-page
   // grant getUserMedia just rejects with NotAllowedError (spike 1).
   if (!(await micGranted())) {
-    fail('mic_permission', 'Microphone not granted. Grant it in Sidecall settings, then start the call again.');
+    fail('mic_permission', 'Microphone not granted. Grant it in Wilco settings, then start the call again.');
     return;
   }
   try {

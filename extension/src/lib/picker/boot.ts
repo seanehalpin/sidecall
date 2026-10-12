@@ -89,7 +89,7 @@ function run(isActive: () => boolean): void {
       pending.delete(localId);
       overlay.showPending(null);
       // No pin came back: the extension isn't listening (reloaded, or not connected to this app).
-      overlay.flashHint("Sidecall didn't get that pick. Check the side panel is connected to this app, or refresh the page.");
+      overlay.flashHint("Wilco didn't get that pick. Check the side panel is connected to this app, or refresh the page.");
     }, PENDING_TTL_MS);
     pending.set(localId, { el: t.kind === 'element' ? t.el : null, regionDoc, timer });
     post({ t: 'pick', localId, draft: built.draft, anchor: built.anchor, rect: built.rect, viewport: built.viewport });
