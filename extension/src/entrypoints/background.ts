@@ -115,6 +115,8 @@ export default defineBackground(() => {
 
   // Picks
   let pickCounter = 0;
+  /** taskId → the picks it's about (set at task.created, cleared when it completes). */
+  const taskPicks = new Map<string, number[]>();
   let pickStore: Record<number, StoredPick> = {};
   /** In-flight pick pipelines (capture + upload); never reject. */
   const pendingPicks = new Map<number, Promise<void>>();
@@ -265,16 +267,31 @@ export default defineBackground(() => {
         showNotification(msg.payload);
         break;
       case 'task.created':
+        // Remember which picks this task is about: its own, plus any already sent with a
+        // message by now (the talker sometimes dispatches on a later turn than the pick).
+        taskPicks.set(msg.payload.id, [
+          ...msg.payload.pickIds,
+          ...state.picks.filter((p) => p.dimmed).map((p) => p.id),
+        ]);
         consumePicks(msg.payload.pickIds);
         break;
       case 'task.completed': {
-        // The work is done: clear the selection rather than leave pins on elements the edit
-        // has just changed (they'd only go stale). That's the task's own picks plus anything
-        // already sent with a message; picks made since and not yet sent stay.
-        const own = state.tasks.find((t) => t.id === msg.payload.taskId)?.pickIds ?? [];
-        removePicks([...own, ...state.picks.filter((p) => p.dimmed).map((p) => p.id)]);
+        // The work is done: clear its selection rather than leave pins on elements the edit
+        // just changed. Only this task's picks - not ones sent since for the next request,
+        // and not ones another active task is still about.
+        const mine = taskPicks.get(msg.payload.taskId) ?? [];
+        taskPicks.delete(msg.payload.taskId);
+        const claimed = new Set(
+          state.tasks
+            .filter((t) => t.id !== msg.payload.taskId && (t.status === 'queued' || t.status === 'running' || t.status === 'blocked'))
+            .flatMap((t) => [...t.pickIds, ...(taskPicks.get(t.id) ?? [])]),
+        );
+        removePicks(mine.filter((id) => !claimed.has(id)));
         break;
       }
+      case 'task.failed':
+        taskPicks.delete(msg.payload.taskId);
+        break;
       case 'transcript.partial':
         callPageTrigger('partial');
         break;

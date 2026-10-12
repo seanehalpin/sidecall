@@ -145,10 +145,10 @@
   --sc-call-idle-padding: 2px; /* not on a call: just the call button, no background */
 
   /* Live-call aura behind the message box */
-  --sc-aura-height: 120px;
+  --sc-aura-height: 130px;
   --sc-aura-inset-x: 0px; /* 0 = flush with the panel edges */
   --sc-aura-offset-y: 0px; /* from the panel's bottom edge */
-  --sc-aura-blur: 24px;
+  --sc-aura-blur: 0px;
   --sc-aura-opacity: 0.2;
 
   /* Dropdown menus */
