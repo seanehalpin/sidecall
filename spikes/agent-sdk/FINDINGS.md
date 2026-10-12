@@ -1,6 +1,6 @@
 # Spike 5 — Agent SDK: findings
 
-`claude-agent-sdk` **0.2.164** (Python 3.12, uv). The SDK uses its bundled CLI (`_bundled/claude` v2.1.292) unless `cli_path` is set. `ANTHROPIC_API_KEY` is unset, and init reports `apiKeySource="/login managed key"`, so it runs on the local Claude Code login. Scratch repos are created in `tempfile.mkdtemp`. Raw output is in `out/`. Total spend for the spike was about $1.50.
+`claude-agent-sdk` **0.2.164** (Python 3.12, uv). The SDK uses its bundled CLI (`_bundled/claude` v2.1.292) unless `cli_path` is set. `ANTHROPIC_API_KEY` is unset, and init reports `apiKeySource="/login managed key"`, so it runs on the local Claude Code login. Scratch repos are created in `tempfile.mkdtemp`. Raw output goes to `out/` (not committed). Total spend for the spike was about $1.50.
 
 ## How to run
 
@@ -40,7 +40,7 @@ The agent ran Read then Edit on `src/card.css`, and `git diff` shows `padding 16
 - **No timeout:** a 150 s approval wait worked. Hooks, by contrast, time out after 60 s by default.
 - **Streaming mode:** it needs the control protocol. `ClaudeSDKClient` is always in streaming mode, and the SDK sets `permission_prompt_tool_name="stdio"` itself.
 - **What shadows it:** `allowed_tools` (with a `CanUseToolShadowedWarning`), `permission_mode`, and allow rules in settings files.
-- **User settings:** the user's own settings have `defaultMode: auto`, so all spike runs use `setting_sources=[]`.
+- **User settings:** a personal `defaultMode` (for example `auto`) would skew permission results, so all spike runs use `setting_sources=[]`.
 - **PreToolUse hook:** fires for every call. "deny" blocked push even under bypassPermissions. "ask" forwarded the call to `can_use_tool` with our reason.
 
 ## 3. Custom tool: works

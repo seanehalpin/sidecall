@@ -16,3 +16,9 @@ dist/
 *.wav
 *.onnx
 .DS_Store
+
+# Local output and private notes
+spikes/agent-sdk/out/
+docs/Design.md
+docs/Tokens.md
+styles/

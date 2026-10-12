@@ -23,6 +23,7 @@ The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.m
 - [uv](https://docs.astral.sh/uv/) (`brew install uv`). It installs Python 3.12 for you.
 - Node 22+ and [pnpm](https://pnpm.io/) 10+.
 - [Claude Code](https://claude.com/claude-code), installed and logged in (`claude` in a terminal). Sidecall runs on your Claude Code login, so changes use your Claude usage.
+- Free local ports: 7823 for the daemon, 5173–5175 for the fixture apps.
 
 ## Run Sidecall
 
