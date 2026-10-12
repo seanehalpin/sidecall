@@ -149,7 +149,7 @@
   --sc-aura-inset-x: 0px; /* 0 = flush with the panel edges */
   --sc-aura-offset-y: 0px; /* from the panel's bottom edge */
   --sc-aura-blur: 24px;
-  --sc-aura-opacity: 0.32;
+  --sc-aura-opacity: 0.2;
 
   /* Dropdown menus */
   --sc-menu-bg: var(--background); /* same as the panel; the border separates it */

@@ -267,6 +267,14 @@ export default defineBackground(() => {
       case 'task.created':
         consumePicks(msg.payload.pickIds);
         break;
+      case 'task.completed': {
+        // The work is done: clear the selection rather than leave pins on elements the edit
+        // has just changed (they'd only go stale). That's the task's own picks plus anything
+        // already sent with a message; picks made since and not yet sent stay.
+        const own = state.tasks.find((t) => t.id === msg.payload.taskId)?.pickIds ?? [];
+        removePicks([...own, ...state.picks.filter((p) => p.dimmed).map((p) => p.id)]);
+        break;
+      }
       case 'transcript.partial':
         callPageTrigger('partial');
         break;
