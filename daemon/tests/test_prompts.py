@@ -190,7 +190,8 @@ def test_confirmation_before_dispatch_is_kept() -> None:
         _stop("end_turn"),
         {"type": "message_stop"},
     ]
-    assert _run(events) == "I'll make the heading red. It's queued."
+    # One confirmation per hand-over: the text after dispatch_task is dropped.
+    assert _run(events) == "I'll make the heading red."
 
 
 def test_plain_reply_and_tool_input_deltas() -> None:
@@ -434,4 +435,30 @@ def test_spoken_confirmation_before_dispatch_is_kept() -> None:
         _stop("end_turn"),
         {"type": "message_stop"},
     ]
-    assert _spoken(events) == "On it\n Queued.\n"
+    assert _spoken(events) == "On it\n"
+
+
+def test_one_confirmation_per_hand_over() -> None:
+    events = [
+        _text("On it, expanding the blocks."),
+        _tool("mcp__sidecall__dispatch_task"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("Queuing it up, expanding all four blocks."),
+        _stop("end_turn"),
+        {"type": "message_stop"},
+    ]
+    assert _run(events) == "On it, expanding the blocks."
+    assert _spoken(events) == "On it, expanding the blocks.\n"
+
+
+def test_confirmation_after_a_silent_dispatch_is_kept() -> None:
+    events = [
+        _tool("mcp__sidecall__dispatch_task"),
+        _stop("tool_use"),
+        {"type": "message_stop"},
+        _text("On it."),
+        _stop("end_turn"),
+    ]
+    assert _run(events) == "On it."
+    assert _spoken(events) == "On it.\n"

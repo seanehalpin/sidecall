@@ -167,6 +167,11 @@ def _is_text_delta(event: dict[str, Any]) -> bool:
     return delta.get("type") == "text_delta" and bool(delta.get("text"))
 
 
+def is_dispatch(block: dict[str, Any]) -> bool:
+    """A dispatch_task tool call (MCP tools are named mcp__<server>__<tool>)."""
+    return str(block.get("name") or "").endswith("dispatch_task")
+
+
 class NarrationFilter:
     """Turns raw API stream events into text worth showing (and later speaking).
 
@@ -181,6 +186,8 @@ class NarrationFilter:
     def __init__(self) -> None:
         self._buffer: list[str] = []
         self._shown = False
+        # Said something, then dispatched: anything after would repeat the confirmation.
+        self._confirmed = False
 
     def feed(self, event: dict[str, Any]) -> str:
         etype = event.get("type")
@@ -190,7 +197,10 @@ class NarrationFilter:
                 if block.get("name") in READ_TOOLS:
                     self._buffer.clear()
                     return ""
-                return self._flush()
+                out = self._flush()
+                if is_dispatch(block) and self._shown:
+                    self._confirmed = True
+                return out
         elif etype == "content_block_delta":
             delta = cast(dict[str, Any], event.get("delta") or {})
             if delta.get("type") == "text_delta":
@@ -207,7 +217,7 @@ class NarrationFilter:
     def _flush(self) -> str:
         text = "".join(self._buffer).strip()
         self._buffer.clear()
-        if not text:
+        if not text or self._confirmed:
             return ""
         out = f" {text}" if self._shown else text
         self._shown = True
@@ -231,6 +241,7 @@ class SpokenFilter:
         self._buffer = ""
         self._opening = True
         self._shown = False
+        self._confirmed = False  # as NarrationFilter: one confirmation per hand-over
 
     def feed(self, event: dict[str, Any]) -> str:
         etype = event.get("type")
@@ -241,7 +252,10 @@ class SpokenFilter:
                 if block.get("name") in READ_TOOLS:
                     self._buffer = ""
                     return ""
-                return self._release(self._buffer)
+                out = self._release(self._buffer)
+                if is_dispatch(block) and self._shown:
+                    self._confirmed = True
+                return out
             return ""
         if etype == "content_block_delta":
             delta = cast(dict[str, Any], event.get("delta") or {})
@@ -269,7 +283,7 @@ class SpokenFilter:
         if not keep_rest:
             self._buffer = ""
         text = text.strip()
-        if not text:
+        if not text or self._confirmed:
             return ""
         out = f" {text}\n" if self._shown else f"{text}\n"
         self._shown = True
