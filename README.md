@@ -4,6 +4,32 @@ Prototype by pointing and talking. Open your local web app in Chrome, hold ⌥ a
 
 The design is in [docs/SPEC.md](docs/SPEC.md) and the build plan in [docs/PLAN.md](docs/PLAN.md).
 
+## Quick start
+
+You need an Apple Silicon Mac, Chrome, [uv](https://docs.astral.sh/uv/), Node 22+ with [pnpm](https://pnpm.io/), and [Claude Code](https://claude.com/claude-code) installed and logged in.
+
+**Install**
+
+1. Start the daemon and leave it running. It prints a 6-digit pairing code.
+   ```sh
+   cd daemon && uv sync && uv run sidecall start
+   ```
+2. In another terminal, build the extension:
+   ```sh
+   cd extension && pnpm install && pnpm build
+   ```
+3. In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose `extension/.output/chrome-mv3` (press **⌘ Shift .** to see the hidden folder). The extension is called **On it**; pin it.
+
+**Use**
+
+1. Open your app's dev server on `localhost` in Chrome and click the **On it** icon to open the side panel.
+2. Enter the pairing code, then pick the folder your app's code lives in.
+3. Type what you want changed and press Enter. Claude Code makes the edit and your page hot-reloads.
+4. To point at something, hold **⌥** and click it (or drag over a region). Refer to it as `[1]`, `[2]`: "make [1] match [2]". **Esc** while holding ⌥ selects the parent.
+5. To talk instead of typing, grant the mic once in the extension's settings, then press the phone button.
+
+More detail is in [Run Sidecall](#run-sidecall) below.
+
 ## Status
 
 **Milestone 3 is built: talk to the agent on a voice call while ⌥-clicking elements, and it hears "make this match that" with `[1]` and `[2]` in the right places.** Settings and persistence (Milestone 4) are next.
@@ -47,14 +73,14 @@ pnpm install
 pnpm build
 ```
 
-In `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose `extension/.output/chrome-mv3`. In the file picker, press **⌘ Shift .** to show the hidden `.output` folder. Pin the Sidecall icon.
+In `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose `extension/.output/chrome-mv3`. In the file picker, press **⌘ Shift .** to show the hidden `.output` folder. Pin the On it icon.
 
 If you're working on the extension itself, run `pnpm dev` instead and load `extension/.output/chrome-mv3-dev`. It rebuilds on save; click reload on the extension in `chrome://extensions` to pick up changes.
 
 **3. Open your app and pair:**
 
 1. Start your app's dev server and open it in Chrome on `localhost` (for example a fixture: `cd fixtures/svelte5-app && pnpm install && pnpm dev`).
-2. Click the Sidecall icon. The side panel opens.
+2. Click the On it icon. The side panel opens.
 3. Enter the pairing code from step 1.
 4. When it asks which folder the app's code lives in, paste the repo path or click **Choose folder…**. Sidecall remembers it for that `localhost` address.
 
@@ -63,12 +89,12 @@ If you're working on the extension itself, run `pnpm dev` instead and load `exte
 **5. Point at things.** With your app open in the active tab, hold **⌥ (Option)** and move the mouse: the element under it is highlighted, labelled with its component and `file:line`.
 
 - **⌥-click** picks an element and **⌥-drag** picks a region. A numbered pin appears on the page, and a chip appears in the pick tray in the side panel.
-- **↑ / ↓** (while holding ⌥ over an element) move the selection to its parent or child. **Esc** clears the current picks.
-- Refer to picks in your message as `[1]`, `[2]`, or click a chip in the tray to insert its marker. For example: "make [1] match the spacing on [2]".
+- **Esc** (while holding ⌥ over an element) moves the selection to its parent; moving the mouse starts again from what is under it. **Esc** without ⌥ clears the current picks.
+- Refer to picks in your message as `[1]`, `[2]`. For example: "make [1] match the spacing on [2]".
 - Picking one item in a repeated list (say one of twelve cards) tells the agent it's one instance of a template, so the edit goes into the shared component rather than one copy.
 - Hovering a chip highlights its pin on the page. Pins stay on their elements through hot reloads and page reloads.
 
-**6. Talk.** Grant the mic once in Sidecall's options (**Grant microphone**), then press the phone button in the side panel. Just talk; you can interrupt the agent, and ⌥-click things while you speak ("make this… match that"). Finished tasks are announced when you pause. If you've hung up, you get a notification, and clicking it starts a call that opens with a summary. Start the daemon with `--preload-voice` to skip the 4 s model load on the first call; the first ever run downloads about 2.6 GB of voice models.
+**6. Talk.** Grant the mic once in the extension's settings (**Grant microphone**), then press the phone button in the side panel. Just talk; you can interrupt the agent, and ⌥-click things while you speak ("make this… match that"). Finished tasks are announced when you pause. If you've hung up, you get a notification, and clicking it starts a call that opens with a summary. Start the daemon with `--preload-voice` to skip the 4 s model load on the first call; the first ever run downloads about 2.6 GB of voice models.
 
 **What else to know**
 
