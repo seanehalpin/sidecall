@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .config import atomic_write_text
+from .handoff import WorkerSessionStats
 from .protocol.models import Model, Preset, TranscriptEntry
 
 log = logging.getLogger(__name__)
@@ -88,6 +89,10 @@ class SessionData(Model):
     talker_session_id: str | None = None
     worker_session_id: str | None = None
     preset: Preset = "default"
+    # About the worker session above, for rotation (handoff.py).
+    worker_last_result_at: float | None = None
+    worker_context_tokens: int | None = None
+    worker_session_cost: float = 0.0
 
 
 class SessionStore:
@@ -119,6 +124,33 @@ class SessionStore:
         if session_id != self.data.worker_session_id:
             self.data.worker_session_id = session_id
             self._save()
+
+    def worker_stats(self) -> WorkerSessionStats:
+        d = self.data
+        return WorkerSessionStats(
+            d.worker_last_result_at, d.worker_context_tokens, d.worker_session_cost
+        )
+
+    def record_worker_result(
+        self, session_id: str, turn_cost: float | None, context_tokens: int | None, now: float
+    ) -> None:
+        d = self.data
+        if session_id != d.worker_session_id:
+            d.worker_session_id = session_id
+            d.worker_session_cost = 0.0
+        d.worker_last_result_at = now
+        if context_tokens is not None:
+            d.worker_context_tokens = context_tokens
+        d.worker_session_cost += turn_cost or 0.0
+        self._save()
+
+    def reset_worker(self) -> None:
+        """Forget the worker session (rotation): the next task starts a new one."""
+        d = self.data
+        d.worker_session_id = None
+        d.worker_last_result_at = d.worker_context_tokens = None
+        d.worker_session_cost = 0.0
+        self._save()
 
     def _save(self) -> None:
         atomic_write_text(self.path, self.data.model_dump_json(indent=2) + "\n")

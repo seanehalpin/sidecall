@@ -258,6 +258,7 @@ class Daemon:
                 emit=lambda msg, key=key: self.broadcast(key, msg),
                 talker_factory=self.talker_factory,
                 call_talker_factory=self.call_talker_factory,
+                rotation=self.config.rotation,
                 worker_factory=self.worker_factory,
                 talker_model=self.config.talker_model,
                 call_talker_model=self.config.call_talker_model,

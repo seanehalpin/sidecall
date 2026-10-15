@@ -13,6 +13,10 @@ from typing import Any
 
 import tomli_w
 
+from .handoff import RotationPolicy
+
+DEFAULT_ROTATION = RotationPolicy()
+
 DEFAULT_PORT = 7823
 # ID of the key pinned in extension/wxt.config.ts (SPEC §6.1, §9.1).
 DEFAULT_EXTENSION_ID = "kcjkimilmanlonlplfancfpoekkphjhb"
@@ -49,8 +53,20 @@ class Config:
     talker_model: str | None = DEFAULT_TALKER_MODEL
     call_talker_model: str | None = DEFAULT_CALL_TALKER_MODEL
     worker_model: str | None = None
+    # Worker session rotation (handoff.py); written only when changed from the default.
+    worker_idle_minutes: float = DEFAULT_ROTATION.idle_secs / 60
+    worker_max_context_tokens: int = DEFAULT_ROTATION.max_context_tokens
+    worker_max_session_cost: float = DEFAULT_ROTATION.max_session_cost
     repos: dict[str, str] = field(default_factory=dict[str, str])
     path: Path = field(default_factory=lambda: sidecall_home() / "config.toml")
+
+    @property
+    def rotation(self) -> RotationPolicy:
+        return RotationPolicy(
+            idle_secs=self.worker_idle_minutes * 60,
+            max_context_tokens=self.worker_max_context_tokens,
+            max_session_cost=self.worker_max_session_cost,
+        )
 
     @property
     def home(self) -> Path:
@@ -71,6 +87,15 @@ class Config:
             talker_model=_opt_str(data.get("talker_model", DEFAULT_TALKER_MODEL)),
             call_talker_model=_opt_str(data.get("call_talker_model", DEFAULT_CALL_TALKER_MODEL)),
             worker_model=_opt_str(data.get("worker_model")),
+            worker_idle_minutes=float(
+                data.get("worker_idle_minutes", DEFAULT_ROTATION.idle_secs / 60)
+            ),
+            worker_max_context_tokens=int(
+                data.get("worker_max_context_tokens", DEFAULT_ROTATION.max_context_tokens)
+            ),
+            worker_max_session_cost=float(
+                data.get("worker_max_session_cost", DEFAULT_ROTATION.max_session_cost)
+            ),
             repos={str(k): str(v) for k, v in raw_repos.items()},
             path=path,
         )
@@ -93,6 +118,22 @@ class Config:
             data["call_talker_model"] = self.call_talker_model
         if self.worker_model:
             data["worker_model"] = self.worker_model
+        rotation = self.rotation
+        for key, value, default in (
+            ("worker_idle_minutes", self.worker_idle_minutes, DEFAULT_ROTATION.idle_secs / 60),
+            (
+                "worker_max_context_tokens",
+                rotation.max_context_tokens,
+                DEFAULT_ROTATION.max_context_tokens,
+            ),
+            (
+                "worker_max_session_cost",
+                rotation.max_session_cost,
+                DEFAULT_ROTATION.max_session_cost,
+            ),
+        ):
+            if value != default:
+                data[key] = value
         data["repos"] = dict(self.repos)
         return tomli_w.dumps(data)
 
@@ -130,6 +171,11 @@ class RepoDirs:
         if not dirs.notes.exists():
             dirs.notes.write_text("", encoding="utf-8")
         return dirs
+
+    @property
+    def task_log(self) -> Path:
+        """`task-log.jsonl`: one line per finished task, for seeding worker sessions."""
+        return self.root / "task-log.jsonl"
 
     @property
     def queue(self) -> Path:

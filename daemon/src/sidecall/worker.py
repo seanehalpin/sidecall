@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -24,7 +26,8 @@ from claude_agent_sdk import (
 )
 
 from .classifier import EDIT_TOOLS, classify
-from .costs import CostTracker
+from .costs import CostTracker, parse_usage
+from .handoff import rotation_reason
 from .paths import rel_path
 from .prompts import WORKER_SYSTEM_APPEND, render_worker_prompt
 from .protocol.messages import TaskEventKind
@@ -111,6 +114,8 @@ class ClaudeWorker:
         self._client: ClaudeSDKClient | None = None
         self._task_id: str | None = None
         self._costs = CostTracker()
+        self._fresh = False  # the client started a new session and hasn't been seeded
+        self._context_tokens: int | None = None
 
     # The hook and the permission callback both read the live preset, so a settings
     # change applies to the next tool call.
@@ -172,12 +177,29 @@ class ClaudeWorker:
                     raise
                 # A stale session id can make resume fail: start fresh.
                 log.warning("worker resume failed; starting a new session")
-                self.session.sessions.set_worker_session(None)
+                self.session.sessions.reset_worker()
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
             self._client = client
             self._costs.reset()
+            self._fresh = self.session.sessions.data.worker_session_id is None
         return self._client
+
+    async def _maybe_rotate(self) -> None:
+        """Start a new session instead of resuming when resuming stops paying."""
+        sessions = self.session.sessions
+        if sessions.data.worker_session_id is None:
+            return
+        reason = rotation_reason(self.session.rotation, sessions.worker_stats(), time.time())
+        if reason is None:
+            return
+        log.info(
+            "worker session rotated reason=%s old_session=%s",
+            reason,
+            sessions.data.worker_session_id,
+        )
+        await self._drop_client()
+        sessions.reset_worker()
 
     async def run(self, task: Task, on_event: OnEvent) -> WorkerResult:
         self._task_id = task.id
@@ -189,11 +211,22 @@ class ClaudeWorker:
             prompt = render_worker_prompt(
                 task, picks, screenshot_attached=image is not None, pick_images=bool(extra)
             )
+            await self._maybe_rotate()
             client = await self._ensure_client()
+            if self._fresh:
+                prompt = await asyncio.to_thread(self.session.worker_seed) + prompt
+                self._fresh = False
+                log.info("worker session seeded from the task log")
             await client.query(sdk_prompt(prompt, image, extra))
             result: ResultMessage | None = None
+            self._context_tokens = None
             async for msg in client.receive_response():
                 if isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:
+                    usage = parse_usage(msg.usage)
+                    if usage is not None:  # each request's own usage: the context size
+                        self._context_tokens = (
+                            usage["input"] + usage["cache_read"] + usage["cache_write"]
+                        )
                     for block in msg.content:
                         if isinstance(block, ToolUseBlock):
                             kind, text = describe_tool_use(block.name, block.input, self.repo)
@@ -229,14 +262,19 @@ class ClaudeWorker:
     def _to_result(self, result: ResultMessage | None, files: list[str]) -> WorkerResult:
         if result is None:
             return WorkerResult("failed", files=files, error="The worker stopped without a result")
-        self.session.sessions.set_worker_session(result.session_id)
         cost = self._costs.record(result.total_cost_usd, result.usage)
+        self.session.sessions.record_worker_result(
+            result.session_id, cost.turn_cost, self._context_tokens, time.time()
+        )
+        stats = self.session.sessions.worker_stats()
         log.info(
-            "worker result subtype=%s error=%s terminal=%s %s",
+            "worker result subtype=%s error=%s terminal=%s %s context=%s total_session_cost=$%.4f",
             result.subtype,
             result.is_error,
             result.terminal_reason,
             cost.log_fields(),
+            self._context_tokens if self._context_tokens is not None else "unknown",
+            stats.session_cost,
         )
         if (result.terminal_reason or "").startswith("aborted"):
             return WorkerResult("cancelled", files=files)

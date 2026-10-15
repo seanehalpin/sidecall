@@ -196,3 +196,15 @@ async def test_call_talker_is_seeded_once_then_rotated(
     await collect(session.voice_reply("chat", [], continuation=False))
     assert FakeTalker.instances[-1] is not first
     assert FakeTalker.instances[-1].prompts[-1].startswith("[Earlier in this call]")
+
+
+async def test_finished_tasks_go_in_the_task_log(session: RepoSession) -> None:
+    task = session._enqueue(make_brief("Red heading"), None, request="make it red")  # pyright: ignore[reportPrivateUsage]
+    for _ in range(100):
+        await asyncio.sleep(0.01)
+        if not session.queue.active:
+            break
+    [entry] = session.task_log.recent()
+    assert entry.title == task.title and entry.status == "completed"
+    assert entry.request.endswith("(user said: make it red)")
+    assert "Earlier tasks in this repo" in session.worker_seed()

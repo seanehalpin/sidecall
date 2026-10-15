@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import subprocess
 import time
 import uuid
 from collections.abc import AsyncGenerator, Callable, Sequence
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from .announcer import Announcement, Announcer, render_announcement
 from .approvals import ApprovalBroker, NotifyAction
 from .config import RepoDirs
+from .handoff import RotationPolicy, TaskLog, TaskLogEntry, render_seed
 from .paths import normalise_brief
 from .picks import PickStore, load_snapshot, normalise_pick, save_snapshot
 from .prompts import (
@@ -138,6 +140,17 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def _git(repo: Path, *args: str) -> str:
+    """A git command's output in `repo`, or "" (not a repo, no git, too slow)."""
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, timeout=5, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return proc.stdout if proc.returncode == 0 else ""
+
+
 def _now_ms() -> float:
     return time.time() * 1000
 
@@ -154,6 +167,7 @@ class RepoSession:
         worker_model: str | None = None,
         call_talker_model: str | None = None,
         call_talker_factory: TalkerFactory | None = None,
+        rotation: RotationPolicy | None = None,
     ) -> None:
         self.repo_path = repo_path
         self.dirs = RepoDirs.create(home, repo_path)
@@ -161,6 +175,7 @@ class RepoSession:
         # Spoken turns; None means the same model as typed ones.
         self.call_talker_model = call_talker_model or talker_model
         self.worker_model = worker_model
+        self.rotation = rotation or RotationPolicy()
         self._emit = emit
         self._talker_factory = talker_factory
         # Spoken turns get a talker of their own, fresh for each call (SPEC §6.3).
@@ -171,6 +186,7 @@ class RepoSession:
         self.queue.load()
         self.transcript = TranscriptStore(self.dirs.transcripts)
         self.sessions = SessionStore(self.dirs.sessions)
+        self.task_log = TaskLog(self.dirs.task_log)
         self.uploads = UploadStore(home)
         self.picks = PickStore()
         self.approvals = ApprovalBroker(
@@ -842,6 +858,34 @@ class RepoSession:
             self._add_transcript("system", f"Task cancelled: {task.title}", task_id=task.id)
             self.announcer.resolve_blocked(task.id)
         self._unseen.append(task_note(done))
+        self._log_task(done, result)
+
+    def _log_task(self, task: Task, result: WorkerResult) -> None:
+        request = task.brief.goal
+        if task.request:
+            request += " (user said: " + " / ".join(task.request.splitlines()) + ")"
+        outcome = result.summary if result.status == "completed" else result.error or ""
+        try:
+            self.task_log.append(
+                TaskLogEntry(
+                    ts=time.time(),
+                    title=task.title,
+                    request=request,
+                    status=result.status,
+                    outcome=outcome,
+                    files=list(result.files),
+                )
+            )
+        except OSError:
+            log.warning("couldn't write the task log", exc_info=True)
+
+    def worker_seed(self) -> str:
+        """Context for a fresh worker session: recent task log entries and git state."""
+        return render_seed(
+            self.task_log.recent(),
+            _git(self.repo_path, "status", "--short"),
+            _git(self.repo_path, "log", "--oneline", "-10"),
+        )
 
     def _announce(self, kind: Literal["completed", "failed"], task: Task, detail: str) -> None:
         self.announcer.add(Announcement(kind, task.id, task.title, detail, _now_ms()))
