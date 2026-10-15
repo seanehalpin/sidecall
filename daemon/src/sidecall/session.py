@@ -14,6 +14,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -39,12 +40,14 @@ from .protocol.messages import (
     AgentTextDeltaPayload,
     AgentTextDone,
     AgentTextDonePayload,
+    ChatCleared,
     CostsState,
     Notify,
     NotifyPayload,
     QueueState,
     QueueStatePayload,
     ServerMessage,
+    SettingsState,
     TaskCompleted,
     TaskCompletedPayload,
     TaskCreated,
@@ -158,6 +161,12 @@ def _git(repo: Path, *args: str) -> str:
     return proc.stdout if proc.returncode == 0 else ""
 
 
+def is_new_day(last_ms: float, now_ms: float) -> bool:
+    """Whether `now_ms` falls on a later local calendar day than `last_ms`."""
+    last = datetime.fromtimestamp(last_ms / 1000).date()
+    return datetime.fromtimestamp(now_ms / 1000).date() > last
+
+
 def _now_ms() -> float:
     return time.time() * 1000
 
@@ -191,8 +200,10 @@ class RepoSession:
 
         self.queue = TaskQueue(self.dirs.queue)
         self.queue.load()
-        self.transcript = TranscriptStore(self.dirs.transcripts)
         self.sessions = SessionStore(self.dirs.sessions)
+        self.transcript = TranscriptStore(
+            self.dirs.transcripts, cleared_at=self.sessions.data.chat_cleared_at
+        )
         self.task_log = TaskLog(self.dirs.task_log)
         self.costs = Costs(since=_now_ms())
         self.uploads = UploadStore(home)
@@ -262,6 +273,55 @@ class RepoSession:
 
     def set_preset(self, preset: Preset) -> None:
         self.sessions.set_preset(preset)
+        self._emit(SettingsState(payload=self.settings()))
+
+    def set_clear_chat_daily(self, on: bool) -> None:
+        self.sessions.set_clear_chat_daily(on)
+        self._emit(SettingsState(payload=self.settings()))
+
+    def settings(self) -> Settings:
+        return Settings(preset=self.preset, clear_chat_daily=self.sessions.data.clear_chat_daily)
+
+    # --- clearing the chat ---
+
+    def clear_chat(self, reason: str = "manual") -> None:
+        """Empty the chat and start the typed-chat talker on a fresh session, so its
+        context starts small again. The transcript files on disk are kept. Tasks, the
+        worker session and a call in progress carry on."""
+        log.info("chat cleared (%s)", reason)
+        now = _now_ms()
+        self.transcript.clear(now)
+        self.sessions.set_chat_cleared(now)
+        self._said = []
+        self._unseen = []
+        self.announcer.mark_seen()
+        talker, self._talker = self._talker, None
+        if talker is not None:
+
+            async def retire() -> None:
+                if self._busy_talker is talker:
+                    with contextlib.suppress(Exception):
+                        await talker.interrupt()
+                async with self._talker_lock:
+                    with contextlib.suppress(Exception):
+                        await talker.close()
+
+            task = asyncio.create_task(retire())
+            self._bg.add(task)
+            task.add_done_callback(self._bg.discard)
+        self._emit(ChatCleared())
+
+    def clear_chat_if_new_day(self, now: float | None = None) -> bool:
+        """With "clear chat daily" on: clear if the latest entry is from an earlier day."""
+        if not self.sessions.data.clear_chat_daily:
+            return False
+        recent = self.transcript.recent()
+        if not recent:
+            return False
+        if is_new_day(recent[-1].ts, _now_ms() if now is None else now):
+            self.clear_chat("new day")
+            return True
+        return False
 
     def repo_info(self, origin: str) -> RepoInfo:
         return RepoInfo(name=self.repo_path.name, path=str(self.repo_path), origin=origin)
@@ -271,7 +331,7 @@ class RepoSession:
             tasks=self.queue.all_tasks(),
             approvals=self.approvals.pending(),
             transcript=self.transcript.recent(),
-            settings=Settings(preset=self.preset),
+            settings=self.settings(),
             costs=self.costs.model_copy(),
         )
 
@@ -401,6 +461,7 @@ class RepoSession:
         page: PageContext | None = None,
     ) -> asyncio.Task[None]:
         """Record the user's text now and run the talker turn in the background."""
+        self.clear_chat_if_new_day()
         self._add_transcript("user", text, pick_ids=pick_ids)
         self._hear(text)
         refs = self.picks.resolve(pick_ids or [])
@@ -478,6 +539,7 @@ class RepoSession:
         return self._call is not None
 
     def attach_call(self, call: Call) -> None:
+        self.clear_chat_if_new_day()
         self._call = call
         self._call_started_ms = _now_ms()
         self._call_turns = 0

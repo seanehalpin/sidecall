@@ -25,6 +25,7 @@ from .models import (
     RepoInfo,
     RepoState,
     Role,
+    Settings,
     Task,
 )
 
@@ -98,6 +99,7 @@ class ApprovalRespondPayload(Model):
 
 class SettingsUpdatePayload(Model):
     preset: Preset | None = None
+    clear_chat_daily: bool | None = None
 
 
 class WebRTCOfferPayload(Model):
@@ -143,6 +145,13 @@ class PickAdd(Envelope):
 class PickRemove(Envelope):
     type: Literal["pick.remove"] = "pick.remove"
     payload: PickRemovePayload
+
+
+class ChatClear(Envelope):
+    """Empty the chat and start the typed-chat talker on a fresh session."""
+
+    type: Literal["chat.clear"] = "chat.clear"
+    payload: Empty = Field(default_factory=Empty)
 
 
 class PicksClear(Envelope):
@@ -220,6 +229,7 @@ ClientMessage = Annotated[
     | PickAdd
     | PickRemove
     | PicksClear
+    | ChatClear
     | UserText
     | CallStart
     | CallEnd
@@ -425,6 +435,16 @@ class ErrorMsg(Envelope):
     payload: ErrorPayload
 
 
+class ChatCleared(Envelope):
+    type: Literal["chat.cleared"] = "chat.cleared"
+    payload: Empty = Field(default_factory=Empty)
+
+
+class SettingsState(Envelope):
+    type: Literal["settings.state"] = "settings.state"
+    payload: Settings
+
+
 class CostsState(Envelope):
     type: Literal["costs.state"] = "costs.state"
     payload: Costs
@@ -456,6 +476,8 @@ ServerMessage = Annotated[
     | WebRTCIceOut
     | ErrorMsg
     | CostsState
+    | ChatCleared
+    | SettingsState
     | Ping,
     Field(discriminator="type"),
 ]

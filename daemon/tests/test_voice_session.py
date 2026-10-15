@@ -239,3 +239,39 @@ async def test_costs_add_up_and_reach_the_extension(session: RepoSession) -> Non
     assert (round(costs.call, 4), costs.worker, costs.talker) == (0.006, 0.05, 0.0)
     sent = [m for m in out if m.type == "costs.state"]
     assert len(sent) == 3 and sent[-1].payload == costs
+
+
+async def test_clear_chat_empties_it_and_starts_a_fresh_typed_talker(
+    session: RepoSession, tmp_path: Path
+) -> None:
+    out = capture(session)
+    await session.submit_user_text("chat")
+    first = FakeTalker.instances[-1]
+    session.sessions.set_talker_session("old-session")
+    session.clear_chat()
+    assert session.transcript.recent() == []
+    assert session.sessions.data.talker_session_id is None
+    assert any(m.type == "chat.cleared" for m in out)
+    await session.submit_user_text("chat")
+    assert FakeTalker.instances[-1] is not first  # a new talker, so a new session
+    # a restart doesn't bring the cleared entries back (the files still have them)
+    again = RepoSession(
+        session.repo_path, tmp_path / "home", lambda _m: None, FakeTalker, FakeWorker
+    )
+    assert [e.text for e in again.transcript.recent()] == ["chat", "Hello there."]
+
+
+async def test_clear_chat_daily(session: RepoSession) -> None:
+    from sidecall.session import is_new_day
+
+    day = 24 * 3600 * 1000
+    noon = 1_790_000_000_000.0
+    assert is_new_day(noon, noon + day) and not is_new_day(noon, noon + 60_000)
+    session._add_transcript("user", "yesterday")  # pyright: ignore[reportPrivateUsage]
+    last = session.transcript.recent()[-1].ts
+    assert not session.clear_chat_if_new_day(last + 60_000)
+    session.set_clear_chat_daily(False)
+    assert not session.clear_chat_if_new_day(last + day)
+    session.set_clear_chat_daily(True)
+    assert session.clear_chat_if_new_day(last + day)
+    assert session.transcript.recent() == []

@@ -28,7 +28,7 @@ function bound(): RailState {
     msg('welcome', {
       repo,
       clockOffset: 12,
-      state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS },
+      state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS },
     }),
   );
 }
@@ -46,7 +46,7 @@ describe('welcome', () => {
           tasks: [task('t1', { status: 'running', lastEvent: 'editing src/App.svelte' })],
           approvals: [approval('a1', 't1')],
           transcript: [{ turnId: 'u1', role: 'user', text: 'hi', pickIds: [], ts: 5, taskId: null }],
-          settings: { preset: 'cautious' }, costs: NO_COSTS,
+          settings: { preset: 'cautious', clearChatDaily: true }, costs: NO_COSTS,
         },
       }),
     );
@@ -58,7 +58,7 @@ describe('welcome', () => {
       { turnId: 'u1', role: 'user', text: 'hi', pickIds: [], ts: 5, taskId: null, streaming: false },
     ]);
     expect(s.lastTaskEvent).toEqual({ t1: 'editing src/App.svelte' });
-    expect(s.settings).toEqual({ preset: 'cautious' });
+    expect(s.settings).toEqual({ preset: 'cautious', clearChatDaily: true });
   });
 
   it('replaces per-repo state from a previous binding', () => {
@@ -77,7 +77,7 @@ describe('welcome', () => {
       msg('welcome', {
         repo: other,
         clockOffset: 0,
-        state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS },
+        state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS },
       }),
     );
     expect(s.repo).toEqual(other);
@@ -94,7 +94,7 @@ describe('welcome', () => {
     expect(s.repoUnknown).toBe('http://localhost:9999');
     s = apply(
       s,
-      msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } }),
+      msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS } }),
     );
     expect(s.repoUnknown).toBeNull();
     expect(railView(s)).toBe('main');
@@ -347,7 +347,7 @@ describe('call lifecycle', () => {
   it('a rebind (origin change) keeps the call', () => {
     let s = applyLocalEvent(bound(), { kind: 'callStarting' });
     s = apply(s, msg('call.state', { state: 'listening' }));
-    s = apply(s, msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } }));
+    s = apply(s, msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS } }));
     expect(s).toMatchObject({ inCall: true, callState: 'listening' });
   });
 });
@@ -472,7 +472,7 @@ describe('picks in rail state', () => {
   });
   it('keeps picks across a welcome for the same repo, drops them for another', () => {
     const w = (origin: string) =>
-      msg('welcome', { repo: { ...repo, origin }, clockOffset: 42, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } });
+      msg('welcome', { repo: { ...repo, origin }, clockOffset: 42, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS } });
     const same = applyServerMessage(withPicks(), w('http://localhost:5173'));
     expect(same.picks).toHaveLength(3);
     expect(same.clockOffset).toBe(42);
@@ -499,11 +499,23 @@ describe('user messages keep the picks they carried', () => {
 
 describe('costs', () => {
   it('come with welcome and update on costs.state', () => {
-    let s = apply(initialRailState(), msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } }));
+    let s = apply(initialRailState(), msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS } }));
     expect(s.costs).toEqual(NO_COSTS);
     s = apply(s, msg('costs.state', { talker: 0.01, call: 0.02, worker: 0.3, since: 0 }));
     expect(s.costs?.worker).toBe(0.3);
     s = apply(s, msg('repo.unknown', { origin: 'http://localhost:9999' }));
     expect(s.costs).toBeNull();
+  });
+});
+
+describe('clearing the chat', () => {
+  it('empties the transcript and takes new settings', () => {
+    let s = apply(initialRailState(), msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS } }));
+    s = apply(s, msg('transcript.final', { turnId: 'u1', role: 'user', text: 'hi', pickIds: [], taskId: null }));
+    expect(s.transcript).toHaveLength(1);
+    s = apply(s, msg('chat.cleared', {}));
+    expect(s.transcript).toEqual([]);
+    s = apply(s, msg('settings.state', { preset: 'default', clearChatDaily: false }));
+    expect(s.settings?.clearChatDaily).toBe(false);
   });
 });

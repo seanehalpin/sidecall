@@ -339,7 +339,7 @@ def test_unknown_origin_then_map(client: TestClient, config: Config, repo: Path)
             "tasks": [],
             "approvals": [],
             "transcript": [],
-            "settings": {"preset": "default"},
+            "settings": {"preset": "default", "clearChatDaily": True},
         }
         assert costs == {"talker": 0.0, "call": 0.0, "worker": 0.0, "since": costs["since"]}
         assert isinstance(p["clockOffset"], float) and p["clockOffset"] > 0
@@ -599,7 +599,10 @@ def test_settings_update_persists(client: TestClient, config: Config, repo: Path
         ws.__exit__(None, None, None)
     with connect(client) as ws2:
         hello(ws2, config.token, APP)
-        assert ws2.receive_json()["payload"]["state"]["settings"] == {"preset": "cautious"}
+        assert ws2.receive_json()["payload"]["state"]["settings"] == {
+            "preset": "cautious",
+            "clearChatDaily": True,
+        }
 
 
 def test_queue_survives_restart(config: Config, repo: Path) -> None:

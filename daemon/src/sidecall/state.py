@@ -22,10 +22,16 @@ TRANSCRIPT_MEMORY = 50
 class TranscriptStore:
     """Append-only transcript: `transcripts/<YYYY-MM-DD>.jsonl`, last 50 kept in memory."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, cleared_at: float = 0.0) -> None:
         self.directory = directory
+        self.cleared_at = cleared_at
+        """Entries before this (epoch ms) were cleared from the chat; the files keep them."""
         self._recent: deque[TranscriptEntry] = deque(maxlen=TRANSCRIPT_MEMORY)
         self._load_recent()
+
+    def clear(self, now: float) -> None:
+        self.cleared_at = now
+        self._recent.clear()
 
     def recent(self) -> list[TranscriptEntry]:
         return list(self._recent)
@@ -68,7 +74,8 @@ class TranscriptStore:
             entries = batch + entries
             if len(entries) >= TRANSCRIPT_MEMORY:
                 break
-        self._recent.extend(_dedupe(entries)[-TRANSCRIPT_MEMORY:])
+        kept = [e for e in _dedupe(entries) if e.ts >= self.cleared_at]
+        self._recent.extend(kept[-TRANSCRIPT_MEMORY:])
 
 
 def _dedupe(entries: list[TranscriptEntry]) -> list[TranscriptEntry]:
@@ -89,6 +96,9 @@ class SessionData(Model):
     talker_session_id: str | None = None
     worker_session_id: str | None = None
     preset: Preset = "default"
+    clear_chat_daily: bool = True
+    chat_cleared_at: float = 0.0
+    """Epoch ms of the last chat clear (manual or daily)."""
     # About the worker session above, for rotation (handoff.py).
     worker_last_result_at: float | None = None
     worker_context_tokens: int | None = None
@@ -113,6 +123,15 @@ class SessionStore:
 
     def set_preset(self, preset: Preset) -> None:
         self.data.preset = preset
+        self._save()
+
+    def set_clear_chat_daily(self, on: bool) -> None:
+        self.data.clear_chat_daily = on
+        self._save()
+
+    def set_chat_cleared(self, now: float) -> None:
+        self.data.chat_cleared_at = now
+        self.data.talker_session_id = None  # the typed talker starts over too
         self._save()
 
     def set_talker_session(self, session_id: str | None) -> None:

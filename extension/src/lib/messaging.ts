@@ -60,6 +60,7 @@ const PAGE_DRAFT_TYPES: ReadonlySet<string> = new Set<PageDraft['type']>([
   'task.reorder',
   'approval.respond',
   'settings.update',
+  'chat.clear',
 ]);
 
 export function isPageDraft(value: unknown): value is PageDraft {

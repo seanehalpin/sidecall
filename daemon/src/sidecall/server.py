@@ -28,6 +28,7 @@ from .protocol.messages import (
     CallMute,
     CallPage,
     CallStart,
+    ChatClear,
     ErrorMsg,
     ErrorPayload,
     Hello,
@@ -382,7 +383,16 @@ class Daemon:
                 self.map_repo(conn, origin, path)
         elif isinstance(
             msg,
-            (UserText, TaskCancel, TaskReorder, SettingsUpdate, PickAdd, PickRemove, PicksClear),
+            (
+                UserText,
+                TaskCancel,
+                TaskReorder,
+                SettingsUpdate,
+                PickAdd,
+                PickRemove,
+                PicksClear,
+                ChatClear,
+            ),
         ):
             await self._repo_message(conn, msg)
         elif isinstance(msg, CallPage):
@@ -408,7 +418,8 @@ class Daemon:
         | SettingsUpdate
         | PickAdd
         | PickRemove
-        | PicksClear,
+        | PicksClear
+        | ChatClear,
     ) -> None:
         session = conn.session
         if session is None:
@@ -429,8 +440,13 @@ class Daemon:
                 conn.error("unknown_task", "No active task with that id.")
         elif isinstance(msg, TaskReorder):
             session.reorder(msg.payload.ids)
-        elif msg.payload.preset is not None:
-            session.set_preset(msg.payload.preset)
+        elif isinstance(msg, ChatClear):
+            session.clear_chat()
+        else:
+            if msg.payload.preset is not None:
+                session.set_preset(msg.payload.preset)
+            if msg.payload.clear_chat_daily is not None:
+                session.set_clear_chat_daily(msg.payload.clear_chat_daily)
 
     # --- calls (SPEC §6.8) ---
 
@@ -525,6 +541,7 @@ class Daemon:
             conn.call_tasks.add(task)
             task.add_done_callback(conn.call_tasks.discard)
         conn.session = session
+        session.clear_chat_if_new_day()  # opening the panel on a new day starts clean
         conn.send(
             Welcome(
                 payload=WelcomePayload(

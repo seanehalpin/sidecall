@@ -11,6 +11,7 @@ export type ClientMessage =
   | PickAdd
   | PickRemove
   | PicksClear
+  | ChatClear
   | UserText
   | CallStart
   | CallEnd
@@ -44,6 +45,8 @@ export type ServerMessage =
   | WebRTCIceOut
   | ErrorMsg
   | CostsState
+  | ChatCleared
+  | SettingsState
   | Ping;
 
 /**
@@ -309,6 +312,18 @@ export interface PicksClear {
  */
 export interface Empty {}
 /**
+ * Empty the chat and start the typed-chat talker on a fresh session.
+ *
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "ChatClear".
+ */
+export interface ChatClear {
+  id: string;
+  payload: Empty;
+  ts: number;
+  type: 'chat.clear';
+}
+/**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema
  * via the `definition` "UserText".
  */
@@ -463,6 +478,7 @@ export interface SettingsUpdate {
  * via the `definition` "SettingsUpdatePayload".
  */
 export interface SettingsUpdatePayload {
+  clearChatDaily: boolean | null;
   preset: ('cautious' | 'default' | 'permissive') | null;
 }
 /**
@@ -585,6 +601,7 @@ export interface Costs {
  * via the `definition` "Settings".
  */
 export interface Settings {
+  clearChatDaily: boolean;
   preset: 'cautious' | 'default' | 'permissive';
 }
 /**
@@ -959,6 +976,26 @@ export interface CostsState {
   payload: Costs;
   ts: number;
   type: 'costs.state';
+}
+/**
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "ChatCleared".
+ */
+export interface ChatCleared {
+  id: string;
+  payload: Empty;
+  ts: number;
+  type: 'chat.cleared';
+}
+/**
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "SettingsState".
+ */
+export interface SettingsState {
+  id: string;
+  payload: Settings;
+  ts: number;
+  type: 'settings.state';
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema

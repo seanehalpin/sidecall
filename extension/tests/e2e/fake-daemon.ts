@@ -46,7 +46,7 @@ export class FakeDaemon {
   clockOffset = 0;
   pairingCode = '123456';
   token = 'tok-test';
-  state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS };
+  state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default', clearChatDaily: true }, costs: NO_COSTS };
   onUserText: ((ws: WebSocket, m: ClientOf<'user.text'>) => void) | null = null;
   /** Answer a webrtc.offer (the test produces a real SDP answer); unset → no answer. */
   onOffer: ((ws: WebSocket, m: ClientOf<'webrtc.offer'>) => void) | null = null;

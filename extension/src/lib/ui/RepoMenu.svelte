@@ -1,13 +1,24 @@
 <script lang="ts">
   // The ⋯ menu at the bottom-left of the message box: which repo this is, what it has cost
-  // since the daemon started, and settings.
+  // since the daemon started, clearing the chat, and settings.
   import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import SettingsIcon from '@lucide/svelte/icons/settings';
+  import MessageSquareXIcon from '@lucide/svelte/icons/message-square-x';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { RailState } from '../rail-state';
   import { costRows, formatUsd, totalCost } from '../costs';
 
-  let { rail, onsettings }: { rail: RailState; onsettings: () => void } = $props();
+  let {
+    rail,
+    onsettings,
+    onclearchat,
+    onclearchatdaily,
+  }: {
+    rail: RailState;
+    onsettings: () => void;
+    onclearchat: () => void;
+    onclearchatdaily: (on: boolean) => void;
+  } = $props();
 
   const name = $derived(rail.repo ? rail.repo.name : 'No repo');
   const path = $derived(rail.repo ? rail.repo.path : (rail.origin ?? 'No local app'));
@@ -41,6 +52,19 @@
           </div>
         {/each}
       </DropdownMenu.Group>
+    {/if}
+    {#if rail.repo}
+      <DropdownMenu.Separator />
+      <!-- Clearing also starts the chat agent on a fresh session, which keeps its context small. -->
+      <DropdownMenu.Item onSelect={onclearchat} disabled={rail.transcript.length === 0}>
+        <MessageSquareXIcon />Clear chat
+      </DropdownMenu.Item>
+      <DropdownMenu.CheckboxItem
+        checked={rail.settings?.clearChatDaily ?? true}
+        onCheckedChange={(on) => onclearchatdaily(on)}
+      >
+        Clear chat daily
+      </DropdownMenu.CheckboxItem>
     {/if}
     <DropdownMenu.Separator />
     <DropdownMenu.Item onSelect={onsettings}>

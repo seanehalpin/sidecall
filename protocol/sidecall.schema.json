@@ -549,6 +549,67 @@
       "title": "ChainEntry",
       "type": "object"
     },
+    "ChatClear": {
+      "additionalProperties": false,
+      "description": "Empty the chat and start the typed-chat talker on a fresh session.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Empty"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "chat.clear",
+          "default": "chat.clear",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "ChatClear",
+      "type": "object"
+    },
+    "ChatCleared": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Empty"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "chat.cleared",
+          "default": "chat.cleared",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "ChatCleared",
+      "type": "object"
+    },
     "Costs": {
       "additionalProperties": false,
       "description": "What this repo's Claude turns have cost since the daemon started, in USD. Turns that\nended without a result (cut off mid-stream) aren't counted: their cost is unknown.",
@@ -1743,6 +1804,11 @@
     "Settings": {
       "additionalProperties": false,
       "properties": {
+        "clearChatDaily": {
+          "default": true,
+          "title": "Clearchatdaily",
+          "type": "boolean"
+        },
         "preset": {
           "default": "default",
           "enum": [
@@ -1755,9 +1821,40 @@
         }
       },
       "required": [
-        "preset"
+        "preset",
+        "clearChatDaily"
       ],
       "title": "Settings",
+      "type": "object"
+    },
+    "SettingsState": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Settings"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "settings.state",
+          "default": "settings.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "SettingsState",
       "type": "object"
     },
     "SettingsUpdate": {
@@ -1793,6 +1890,18 @@
     "SettingsUpdatePayload": {
       "additionalProperties": false,
       "properties": {
+        "clearChatDaily": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clearchatdaily"
+        },
         "preset": {
           "anyOf": [
             {
@@ -1812,7 +1921,8 @@
         }
       },
       "required": [
-        "preset"
+        "preset",
+        "clearChatDaily"
       ],
       "title": "SettingsUpdatePayload",
       "type": "object"
@@ -2901,6 +3011,7 @@
           "call.mute": "#/$defs/CallMute",
           "call.page": "#/$defs/CallPage",
           "call.start": "#/$defs/CallStart",
+          "chat.clear": "#/$defs/ChatClear",
           "hello": "#/$defs/Hello",
           "pair.request": "#/$defs/PairRequest",
           "pick.add": "#/$defs/PickAdd",
@@ -2939,6 +3050,9 @@
         },
         {
           "$ref": "#/$defs/PicksClear"
+        },
+        {
+          "$ref": "#/$defs/ChatClear"
         },
         {
           "$ref": "#/$defs/UserText"
@@ -2986,6 +3100,7 @@
           "agent.text.done": "#/$defs/AgentTextDone",
           "approval.resolved": "#/$defs/ApprovalResolved",
           "call.state": "#/$defs/CallStateMsg",
+          "chat.cleared": "#/$defs/ChatCleared",
           "costs.state": "#/$defs/CostsState",
           "error": "#/$defs/ErrorMsg",
           "notify": "#/$defs/Notify",
@@ -2993,6 +3108,7 @@
           "ping": "#/$defs/Ping",
           "queue.state": "#/$defs/QueueState",
           "repo.unknown": "#/$defs/RepoUnknown",
+          "settings.state": "#/$defs/SettingsState",
           "task.blocked": "#/$defs/TaskBlocked",
           "task.completed": "#/$defs/TaskCompleted",
           "task.created": "#/$defs/TaskCreated",
@@ -3066,6 +3182,12 @@
         },
         {
           "$ref": "#/$defs/CostsState"
+        },
+        {
+          "$ref": "#/$defs/ChatCleared"
+        },
+        {
+          "$ref": "#/$defs/SettingsState"
         },
         {
           "$ref": "#/$defs/Ping"

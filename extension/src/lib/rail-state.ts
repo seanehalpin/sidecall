@@ -319,6 +319,10 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
     }
     case 'costs.state':
       return { ...state, costs: msg.payload };
+    case 'settings.state':
+      return { ...state, settings: msg.payload };
+    case 'chat.cleared':
+      return { ...state, transcript: [], partial: null };
     case 'queue.state': {
       const tasks = msg.payload.tasks;
       const lastTaskEvent: Record<string, string> = {};

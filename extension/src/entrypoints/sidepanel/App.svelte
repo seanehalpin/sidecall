@@ -161,7 +161,12 @@
 </Tooltip.Provider>
 
 {#snippet leading()}
-  <RepoMenu {rail} onsettings={openSettings} />
+  <RepoMenu
+    {rail}
+    onsettings={openSettings}
+    onclearchat={() => client.send({ type: 'chat.clear', payload: {} })}
+    onclearchatdaily={(on) => client.send({ type: 'settings.update', payload: { clearChatDaily: on, preset: null } })}
+  />
 {/snippet}
 
 {#snippet trailing()}

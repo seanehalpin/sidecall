@@ -223,6 +223,8 @@ class RepoInfo(Model):
 
 class Settings(Model):
     preset: Preset = "default"
+    clear_chat_daily: bool = True
+    """Start each day with an empty chat and a fresh typed-chat talker session."""
 
 
 class Costs(Model):
