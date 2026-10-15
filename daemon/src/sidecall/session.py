@@ -39,6 +39,7 @@ from .protocol.messages import (
     AgentTextDeltaPayload,
     AgentTextDone,
     AgentTextDonePayload,
+    CostsState,
     Notify,
     NotifyPayload,
     QueueState,
@@ -57,6 +58,7 @@ from .protocol.messages import (
 )
 from .protocol.models import (
     Brief,
+    Costs,
     PageContext,
     Pick,
     Preset,
@@ -192,6 +194,7 @@ class RepoSession:
         self.transcript = TranscriptStore(self.dirs.transcripts)
         self.sessions = SessionStore(self.dirs.sessions)
         self.task_log = TaskLog(self.dirs.task_log)
+        self.costs = Costs(since=_now_ms())
         self.uploads = UploadStore(home)
         self.picks = PickStore()
         self.approvals = ApprovalBroker(
@@ -269,7 +272,15 @@ class RepoSession:
             approvals=self.approvals.pending(),
             transcript=self.transcript.recent(),
             settings=Settings(preset=self.preset),
+            costs=self.costs.model_copy(),
         )
+
+    def add_cost(self, kind: Literal["talker", "call", "worker"], usd: float | None) -> None:
+        """Count a finished turn's cost and tell the extension."""
+        if not usd:
+            return
+        setattr(self.costs, kind, getattr(self.costs, kind) + usd)
+        self._emit(CostsState(payload=self.costs.model_copy()))
 
     def emit(self, msg: ServerMessage) -> None:
         self._emit(msg)

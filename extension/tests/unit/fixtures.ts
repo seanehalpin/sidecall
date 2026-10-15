@@ -32,3 +32,5 @@ export function approval(id: string, taskId: string): Approval {
 }
 
 export const repo = { name: 'svelte5-app', path: '/Users/me/fixtures/svelte5-app', origin: 'http://localhost:5173' };
+
+export const NO_COSTS = { talker: 0, call: 0, worker: 0, since: 0 };

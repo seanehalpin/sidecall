@@ -549,6 +549,70 @@
       "title": "ChainEntry",
       "type": "object"
     },
+    "Costs": {
+      "additionalProperties": false,
+      "description": "What this repo's Claude turns have cost since the daemon started, in USD. Turns that\nended without a result (cut off mid-stream) aren't counted: their cost is unknown.",
+      "properties": {
+        "call": {
+          "default": 0.0,
+          "title": "Call",
+          "type": "number"
+        },
+        "since": {
+          "default": 0.0,
+          "title": "Since",
+          "type": "number"
+        },
+        "talker": {
+          "default": 0.0,
+          "title": "Talker",
+          "type": "number"
+        },
+        "worker": {
+          "default": 0.0,
+          "title": "Worker",
+          "type": "number"
+        }
+      },
+      "required": [
+        "talker",
+        "call",
+        "worker",
+        "since"
+      ],
+      "title": "Costs",
+      "type": "object"
+    },
+    "CostsState": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/Costs"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "costs.state",
+          "default": "costs.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "type",
+        "payload"
+      ],
+      "title": "CostsState",
+      "type": "object"
+    },
     "ElementInfo": {
       "additionalProperties": false,
       "properties": {
@@ -1549,6 +1613,9 @@
           "title": "Approvals",
           "type": "array"
         },
+        "costs": {
+          "$ref": "#/$defs/Costs"
+        },
         "settings": {
           "$ref": "#/$defs/Settings"
         },
@@ -1571,7 +1638,8 @@
         "tasks",
         "approvals",
         "transcript",
-        "settings"
+        "settings",
+        "costs"
       ],
       "title": "RepoState",
       "type": "object"
@@ -2918,6 +2986,7 @@
           "agent.text.done": "#/$defs/AgentTextDone",
           "approval.resolved": "#/$defs/ApprovalResolved",
           "call.state": "#/$defs/CallStateMsg",
+          "costs.state": "#/$defs/CostsState",
           "error": "#/$defs/ErrorMsg",
           "notify": "#/$defs/Notify",
           "pair.result": "#/$defs/PairResult",
@@ -2994,6 +3063,9 @@
         },
         {
           "$ref": "#/$defs/ErrorMsg"
+        },
+        {
+          "$ref": "#/$defs/CostsState"
         },
         {
           "$ref": "#/$defs/Ping"

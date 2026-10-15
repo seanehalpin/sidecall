@@ -3,6 +3,8 @@ import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
+
+const NO_COSTS = { talker: 0, call: 0, worker: 0, since: 0 };
 import type { ClientMessage, ClientOf, ClientType, RepoInfo, RepoState, ServerMessage, ServerOf, ServerType } from '../../src/lib/protocol';
 
 export interface Received {
@@ -44,7 +46,7 @@ export class FakeDaemon {
   clockOffset = 0;
   pairingCode = '123456';
   token = 'tok-test';
-  state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } };
+  state: RepoState = { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS };
   onUserText: ((ws: WebSocket, m: ClientOf<'user.text'>) => void) | null = null;
   /** Answer a webrtc.offer (the test produces a real SDP answer); unset → no answer. */
   onOffer: ((ws: WebSocket, m: ClientOf<'webrtc.offer'>) => void) | null = null;

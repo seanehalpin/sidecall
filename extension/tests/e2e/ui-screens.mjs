@@ -101,6 +101,8 @@ try {
   await panel.locator('.rail[data-view="main"]').waitFor();
   await sleep(300);
   await shot(panel, '04-main-empty');
+  daemon.broadcast(serverMsg('costs.state', { talker: 0.084, call: 0.031, worker: 1.27, since: Date.now() - 3_600_000 }));
+  await sleep(100);
   await panel.getByRole('button', { name: 'Repo menu' }).click();
   await panel.locator('[data-slot="dropdown-menu-content"]').waitFor();
   await shot(panel, '04b-repo-menu');

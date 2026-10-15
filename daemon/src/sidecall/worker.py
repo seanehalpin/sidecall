@@ -263,6 +263,7 @@ class ClaudeWorker:
         if result is None:
             return WorkerResult("failed", files=files, error="The worker stopped without a result")
         cost = self._costs.record(result.total_cost_usd, result.usage)
+        self.session.add_cost("worker", cost.turn_cost)
         self.session.sessions.record_worker_result(
             result.session_id, cost.turn_cost, self._context_tokens, time.time()
         )

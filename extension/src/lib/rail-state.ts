@@ -4,6 +4,7 @@
 import type {
   Approval,
   CallState,
+  Costs,
   RepoInfo,
   Role,
   ServerMessage,
@@ -75,6 +76,8 @@ export interface RailState {
   /** The task.event steps seen per task id (capped), oldest first. */
   taskSteps: Record<string, TaskStep[]>;
   settings: Settings | null;
+  /** What this repo's Claude turns have cost since the daemon started (costs.state). */
+  costs: Costs | null;
   /** What the daemon says the voice pipeline is doing (call.state); 'connecting' locally while starting. */
   callState: CallState;
   /** A call is up or starting (the worker owns the lifecycle; survives tab and origin changes). */
@@ -110,6 +113,7 @@ export function initialRailState(): RailState {
     lastTaskEvent: {},
     taskSteps: {},
     settings: null,
+    costs: null,
     callState: 'idle',
     inCall: false,
     muted: false,
@@ -141,7 +145,7 @@ export type LocalEvent =
 
 const PER_REPO_RESET: Pick<
   RailState,
-  'repo' | 'transcript' | 'partial' | 'tasks' | 'approvals' | 'lastTaskEvent' | 'taskSteps' | 'settings'
+  'repo' | 'transcript' | 'partial' | 'tasks' | 'approvals' | 'lastTaskEvent' | 'taskSteps' | 'settings' | 'costs'
 > = {
   repo: null,
   transcript: [],
@@ -151,6 +155,7 @@ const PER_REPO_RESET: Pick<
   lastTaskEvent: {},
   taskSteps: {},
   settings: null,
+  costs: null,
 };
 
 function fromEntry(e: TranscriptEntry): TranscriptItem {
@@ -218,6 +223,7 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
         lastTaskEvent: eventsFromTasks(rs.tasks),
         taskSteps: stepsForTasks(rs.tasks, {}),
         settings: rs.settings,
+        costs: rs.costs,
         lastError: null,
       };
     }
@@ -311,6 +317,8 @@ export function applyServerMessage(state: RailState, msg: ServerMessage): RailSt
       const picks = state.picks.some((p) => used.has(p.id)) ? state.picks.filter((p) => !used.has(p.id)) : state.picks;
       return { ...state, picks, tasks: upsertTask(state.tasks, msg.payload) };
     }
+    case 'costs.state':
+      return { ...state, costs: msg.payload };
     case 'queue.state': {
       const tasks = msg.payload.tasks;
       const lastTaskEvent: Record<string, string> = {};

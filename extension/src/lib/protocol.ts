@@ -51,6 +51,7 @@ export const SERVER_TYPES = [
   'webrtc.answer',
   'webrtc.ice',
   'error',
+  'costs.state',
   'ping',
 ] as const satisfies readonly ServerType[];
 

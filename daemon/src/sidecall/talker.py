@@ -434,6 +434,9 @@ class ClaudeTalker:
                     cost = self._costs.record(msg.total_cost_usd, msg.usage)
                     timing.cost_usd = msg.total_cost_usd
                     timing.turn_cost = cost.turn_cost
+                    self.session.add_cost(
+                        "talker" if self.persist_session else "call", cost.turn_cost
+                    )
                     if self.persist_session:
                         self.session.sessions.set_talker_session(msg.session_id)
                     log.info(

@@ -43,6 +43,7 @@ export type ServerMessage =
   | WebRTCAnswer
   | WebRTCIceOut
   | ErrorMsg
+  | CostsState
   | Ping;
 
 /**
@@ -551,6 +552,7 @@ export interface RepoInfo {
  */
 export interface RepoState {
   approvals: Approval[];
+  costs: Costs;
   settings: Settings;
   tasks: Task[];
   transcript: TranscriptEntry[];
@@ -564,6 +566,19 @@ export interface Approval {
   id: string;
   reason: string;
   taskId: string;
+}
+/**
+ * What this repo's Claude turns have cost since the daemon started, in USD. Turns that
+ * ended without a result (cut off mid-stream) aren't counted: their cost is unknown.
+ *
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "Costs".
+ */
+export interface Costs {
+  call: number;
+  since: number;
+  talker: number;
+  worker: number;
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema
@@ -934,6 +949,16 @@ export interface ErrorMsg {
 export interface ErrorPayload {
   code: string;
   message: string;
+}
+/**
+ * This interface was referenced by `SidecallProtocol`'s JSON-Schema
+ * via the `definition` "CostsState".
+ */
+export interface CostsState {
+  id: string;
+  payload: Costs;
+  ts: number;
+  type: 'costs.state';
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema

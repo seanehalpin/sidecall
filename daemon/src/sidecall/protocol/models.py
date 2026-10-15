@@ -225,11 +225,25 @@ class Settings(Model):
     preset: Preset = "default"
 
 
+class Costs(Model):
+    """What this repo's Claude turns have cost since the daemon started, in USD. Turns that
+    ended without a result (cut off mid-stream) aren't counted: their cost is unknown."""
+
+    talker: float = 0.0
+    """Typed turns."""
+    call: float = 0.0
+    """Voice-call turns and announcements."""
+    worker: float = 0.0
+    since: float = 0.0
+    """When counting started (epoch ms)."""
+
+
 class RepoState(Model):
     tasks: list[Task] = Field(default_factory=list[Task])
     approvals: list[Approval] = Field(default_factory=list[Approval])
     transcript: list[TranscriptEntry] = Field(default_factory=list[TranscriptEntry])
     settings: Settings = Field(default_factory=Settings)
+    costs: Costs = Field(default_factory=Costs)
 
 
 CallState = Literal["idle", "connecting", "listening", "thinking", "speaking"]

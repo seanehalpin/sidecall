@@ -227,3 +227,15 @@ async def test_hang_up_after_on_it_still_dispatches(session: RepoSession) -> Non
     assert task.status == "completed"
     assert FakeTalker.instances[-1].wound_down == 1
     assert FakeTalker.instances[-1].interrupts == 0
+
+
+async def test_costs_add_up_and_reach_the_extension(session: RepoSession) -> None:
+    out = capture(session)
+    session.add_cost("call", 0.004)
+    session.add_cost("worker", 0.05)
+    session.add_cost("call", 0.002)
+    session.add_cost("talker", None)  # unknown: not counted, nothing sent
+    costs = session.state().costs
+    assert (round(costs.call, 4), costs.worker, costs.talker) == (0.006, 0.05, 0.0)
+    sent = [m for m in out if m.type == "costs.state"]
+    assert len(sent) == 3 and sent[-1].payload == costs

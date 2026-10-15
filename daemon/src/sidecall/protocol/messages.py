@@ -16,6 +16,7 @@ from pydantic import Field, TypeAdapter
 from .models import (
     Approval,
     CallState,
+    Costs,
     Empty,
     Model,
     PageContext,
@@ -424,6 +425,11 @@ class ErrorMsg(Envelope):
     payload: ErrorPayload
 
 
+class CostsState(Envelope):
+    type: Literal["costs.state"] = "costs.state"
+    payload: Costs
+
+
 class Ping(Envelope):
     type: Literal["ping"] = "ping"
     payload: SeqPayload
@@ -449,6 +455,7 @@ ServerMessage = Annotated[
     | WebRTCAnswer
     | WebRTCIceOut
     | ErrorMsg
+    | CostsState
     | Ping,
     Field(discriminator="type"),
 ]

@@ -13,7 +13,7 @@ import {
   TRANSCRIPT_LIMIT,
   type RailState,
 } from '../../src/lib/rail-state';
-import { approval, msg, repo, task } from './fixtures';
+import { NO_COSTS, approval, msg, repo, task } from './fixtures';
 
 const apply = (s: RailState, ...msgs: Parameters<typeof applyServerMessage>[1][]) =>
   msgs.reduce(applyServerMessage, s);
@@ -28,7 +28,7 @@ function bound(): RailState {
     msg('welcome', {
       repo,
       clockOffset: 12,
-      state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } },
+      state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS },
     }),
   );
 }
@@ -46,7 +46,7 @@ describe('welcome', () => {
           tasks: [task('t1', { status: 'running', lastEvent: 'editing src/App.svelte' })],
           approvals: [approval('a1', 't1')],
           transcript: [{ turnId: 'u1', role: 'user', text: 'hi', pickIds: [], ts: 5, taskId: null }],
-          settings: { preset: 'cautious' },
+          settings: { preset: 'cautious' }, costs: NO_COSTS,
         },
       }),
     );
@@ -77,7 +77,7 @@ describe('welcome', () => {
       msg('welcome', {
         repo: other,
         clockOffset: 0,
-        state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } },
+        state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS },
       }),
     );
     expect(s.repo).toEqual(other);
@@ -94,7 +94,7 @@ describe('welcome', () => {
     expect(s.repoUnknown).toBe('http://localhost:9999');
     s = apply(
       s,
-      msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } } }),
+      msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } }),
     );
     expect(s.repoUnknown).toBeNull();
     expect(railView(s)).toBe('main');
@@ -347,7 +347,7 @@ describe('call lifecycle', () => {
   it('a rebind (origin change) keeps the call', () => {
     let s = applyLocalEvent(bound(), { kind: 'callStarting' });
     s = apply(s, msg('call.state', { state: 'listening' }));
-    s = apply(s, msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } } }));
+    s = apply(s, msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } }));
     expect(s).toMatchObject({ inCall: true, callState: 'listening' });
   });
 });
@@ -472,7 +472,7 @@ describe('picks in rail state', () => {
   });
   it('keeps picks across a welcome for the same repo, drops them for another', () => {
     const w = (origin: string) =>
-      msg('welcome', { repo: { ...repo, origin }, clockOffset: 42, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' } } });
+      msg('welcome', { repo: { ...repo, origin }, clockOffset: 42, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } });
     const same = applyServerMessage(withPicks(), w('http://localhost:5173'));
     expect(same.picks).toHaveLength(3);
     expect(same.clockOffset).toBe(42);
@@ -494,5 +494,16 @@ describe('user messages keep the picks they carried', () => {
       payload: { turnId: 'u1', role: 'user', text: 'make this green', pickIds: [1], taskId: null },
     } as never);
     expect(s.transcript.at(-1)?.picks).toEqual([{ id: 1, label: 'Card', path: 'CardList › Card › h2', tooltip: 'Card.svelte:8' }]);
+  });
+});
+
+describe('costs', () => {
+  it('come with welcome and update on costs.state', () => {
+    let s = apply(initialRailState(), msg('welcome', { repo, clockOffset: 0, state: { tasks: [], approvals: [], transcript: [], settings: { preset: 'default' }, costs: NO_COSTS } }));
+    expect(s.costs).toEqual(NO_COSTS);
+    s = apply(s, msg('costs.state', { talker: 0.01, call: 0.02, worker: 0.3, since: 0 }));
+    expect(s.costs?.worker).toBe(0.3);
+    s = apply(s, msg('repo.unknown', { origin: 'http://localhost:9999' }));
+    expect(s.costs).toBeNull();
   });
 });

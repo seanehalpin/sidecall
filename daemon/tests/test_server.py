@@ -334,12 +334,14 @@ def test_unknown_origin_then_map(client: TestClient, config: Config, repo: Path)
         assert welcome["type"] == "welcome"
         p = welcome["payload"]
         assert p["repo"] == {"name": "app", "path": str(repo.resolve()), "origin": APP}
+        costs = p["state"].pop("costs")
         assert p["state"] == {
             "tasks": [],
             "approvals": [],
             "transcript": [],
             "settings": {"preset": "default"},
         }
+        assert costs == {"talker": 0.0, "call": 0.0, "worker": 0.0, "since": costs["since"]}
         assert isinstance(p["clockOffset"], float) and p["clockOffset"] > 0
     assert Config.load(config.home).repos == {APP: str(repo.resolve())}
 
