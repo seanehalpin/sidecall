@@ -531,3 +531,13 @@ async def test_live_talker_latency_and_announcement(tmp_path: Path) -> None:
     assert quiet and min(quiet) >= QUIET_MS
     agent_texts = [e.text for e in session.transcript.recent() if e.role == "agent"]
     assert len(agent_texts) >= len(lines) + 1
+
+
+async def test_rewarm_runs_stt_and_tts_quickly_when_warm() -> None:
+    from sidecall.voice.models import get_models, needs_rewarm, rewarm_sync, run_mlx
+
+    assert needs_rewarm(1000.0, 800.0) and not needs_rewarm(1000.0, 950.0)
+    models = await get_models()
+    secs = await run_mlx(lambda: rewarm_sync(models))
+    print(f"warm re-warm pass: {secs:.2f}s")
+    assert secs < 1.5

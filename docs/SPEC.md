@@ -383,6 +383,7 @@ Picks:
   - Barge-in about 355 ms at VAD `start_secs` 0.2 (`SIDECALL_VAD_START_SECS` overrides; 0.15 gives about 308 ms).
 - **Pick binding:**
   - Constants: a 3 s pre-speech window, 1.5 s continuation, a 1 s hold after a pick, and `LATE_PICK_MS` = 1 s.
+- **Re-warm after idle:** when a call's offer arrives and the MLX models have been idle for over 2 minutes, one short phrase goes through Kokoro and that audio through Parakeet in the background, output discarded. After hours idle the first STT pass had taken 7.85 s and Kokoro's first reply came back empty. A warm pass takes about 0.2 s and finishes during ICE and the 600 ms opening delay.
   - A pick reaching the daemon late (made during the turn or up to 1 s after it) re-submits the turn.
   - A merged turn re-sends `transcript.final` with the same turnId, which replaces the entry.
 - **Announcer:**

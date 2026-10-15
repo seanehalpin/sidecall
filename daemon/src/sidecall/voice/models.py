@@ -35,8 +35,23 @@ MLX_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx")
 Float32Array = npt.NDArray[np.float32]
 
 
+REWARM_AFTER_SECS = 120.0
+"""Idle time after which a call re-warms the models: after hours idle the first STT pass
+took 7.85 s and Kokoro's first reply came back empty."""
+
+_last_mlx_at = 0.0
+
+
 async def run_mlx[T](fn: Callable[[], T]) -> T:
-    return await asyncio.get_running_loop().run_in_executor(MLX_EXECUTOR, fn)
+    global _last_mlx_at
+    try:
+        return await asyncio.get_running_loop().run_in_executor(MLX_EXECUTOR, fn)
+    finally:
+        _last_mlx_at = time.monotonic()
+
+
+def needs_rewarm(now: float, last_used: float, after: float = REWARM_AFTER_SECS) -> bool:
+    return now - last_used > after
 
 
 def lib(name: str) -> Any:
@@ -104,6 +119,28 @@ def load_models_sync() -> VoiceModels:
         models.transcribe(clip.astype(np.float32))
     secs["parakeet_warmup"] = time.perf_counter() - t
     return models
+
+
+def rewarm_sync(models: VoiceModels) -> float:
+    """One short phrase through Kokoro and that audio through Parakeet, output discarded.
+    Returns the seconds it took."""
+    t = time.perf_counter()
+    audio, sr = _kokoro_audio(models, "Hello there.")
+    models.transcribe(resample(audio, sr, STT_SAMPLE_RATE).astype(np.float32))
+    return time.perf_counter() - t
+
+
+async def rewarm_if_idle(models: VoiceModels) -> None:
+    """At call start, after a long idle: warm STT and TTS again in the background. It
+    takes the MLX thread briefly, ahead of the opening announcement's TTS."""
+    if not needs_rewarm(time.monotonic(), _last_mlx_at):
+        return
+    try:
+        secs = await run_mlx(lambda: rewarm_sync(models))
+    except Exception:
+        log.warning("voice re-warm failed", exc_info=True)
+        return
+    log.info("voice models re-warmed in %.2f s", secs)
 
 
 _models: VoiceModels | None = None

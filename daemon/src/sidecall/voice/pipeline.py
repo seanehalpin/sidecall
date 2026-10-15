@@ -51,7 +51,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from . import loopback
 from .call import CallEvents, ReplyStream
-from .models import VoiceModels, get_models
+from .models import VoiceModels, get_models, rewarm_if_idle
 from .services import KokoroTTSService, ParakeetSTTService
 from .talker import OutputTap, SegmentTap, TalkerProcessor
 
@@ -216,9 +216,13 @@ class PipecatBackend:
         self._worker: PipelineWorker | None = None
         self._talker: TalkerProcessor | None = None
         self._run: asyncio.Task[None] | None = None
+        self._rewarm: asyncio.Task[None] | None = None
 
     async def start(self, offer_sdp: str) -> str:
         models = await get_models()
+        # In the background: the answer, ICE and the opening delay take longer than a
+        # warm pass, so the opening announcement doesn't wait on it.
+        self._rewarm = asyncio.create_task(rewarm_if_idle(models))
         conn = SmallWebRTCConnection()
         self._conn = conn
         # aiortc gathers every (loopback) candidate in setLocalDescription, so the
