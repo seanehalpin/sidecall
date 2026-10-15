@@ -604,7 +604,8 @@ def test_call_signalling_and_voice_turn_through_the_talker(
         talker = FakeTalker.instances[-1]
         assert talker.spoken == [True]
         assert talker.warmed == 1
-        assert "[Voice] This turn was spoken" in talker.prompts[-1]
+        # the call talker's turn: status line, no history yet (this is the first turn)
+        assert talker.prompts[-1] == "[Worker] no tasks yet.\nUser: chat"
 
         session = daemon.sessions[str(repo.resolve())]
         assert [(e.role, e.text) for e in session.transcript.recent()] == [
@@ -647,8 +648,9 @@ def test_spoken_turn_uses_latest_call_page(
         until(ws, "transcript.final", _role("agent"))
         talker = FakeTalker.instances[-1]
         assert "/b" in talker.prompts[-1] and "/a\n" not in talker.prompts[-1]
-        assert "screenshot" in talker.prompts[-1]
-        assert talker.images[-1] is not None
+        # no images go to the call talker; the page (with its screenshot) goes to tasks
+        assert "screenshot" not in talker.prompts[-1]
+        assert talker.images[-1] is None
         send(ws, "call.end")
         until(ws, "call.state", _state("idle"))
     finally:

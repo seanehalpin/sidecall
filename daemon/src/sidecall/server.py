@@ -197,6 +197,12 @@ def _default_talker_factory(session: RepoSession):  # pragma: no cover - needs C
     return ClaudeTalker(session)
 
 
+def _default_call_talker_factory(session: RepoSession):  # pragma: no cover - needs Claude
+    from .talker import CallTalker
+
+    return CallTalker(session)
+
+
 def _default_worker_factory(session: RepoSession):  # pragma: no cover - needs Claude
     from .worker import ClaudeWorker
 
@@ -215,6 +221,7 @@ class Daemon:
         config: Config,
         *,
         talker_factory: TalkerFactory = _default_talker_factory,
+        call_talker_factory: TalkerFactory | None = None,
         worker_factory: WorkerFactory = _default_worker_factory,
         browse: BrowseFn = choose_folder,
         ping_interval: float = PING_INTERVAL,
@@ -224,6 +231,10 @@ class Daemon:
         self.config = config
         self.pairing = PairingCode()
         self.talker_factory = talker_factory
+        # Tests pass one fake talker factory for both; the real daemon has two.
+        if call_talker_factory is None and talker_factory is _default_talker_factory:
+            call_talker_factory = _default_call_talker_factory
+        self.call_talker_factory = call_talker_factory
         self.worker_factory = worker_factory
         self.browse = browse
         self.ping_interval = ping_interval
@@ -246,6 +257,7 @@ class Daemon:
                 self.config.home,
                 emit=lambda msg, key=key: self.broadcast(key, msg),
                 talker_factory=self.talker_factory,
+                call_talker_factory=self.call_talker_factory,
                 worker_factory=self.worker_factory,
                 talker_model=self.config.talker_model,
                 call_talker_model=self.config.call_talker_model,

@@ -16,6 +16,7 @@ from sidecall.prompts import (
     render_talker_turn,
     render_target,
     render_worker_prompt,
+    render_worker_status,
     task_note,
 )
 from sidecall.protocol.models import Brief, PageContext, Target, Viewport
@@ -465,3 +466,19 @@ def test_confirmation_after_a_silent_dispatch_is_kept() -> None:
     ]
     assert _run(events) == "On it."
     assert _spoken(events) == "On it.\n"
+
+
+def test_render_worker_status() -> None:
+    assert render_worker_status([]) == "[Worker] no tasks yet."
+    running = make_task("Dark mode")
+    running.status = "running"
+    running.last_event = "Editing src/app.css"
+    queued = make_task("Sticky header")
+    done = make_task("Red heading")
+    done.status, done.summary, done.finished_at = "completed", "Made it red. Also tidied.", 5.0
+    failed = make_task("Logo")
+    failed.status, failed.error, failed.finished_at = "failed", "File not found", 6.0
+    assert render_worker_status([running, queued, done, failed]) == (
+        "[Worker] running 'Dark mode' (Editing src/app.css); queued 'Sticky header'; "
+        "'Red heading' completed: Made it red.; 'Logo' failed: File not found."
+    )

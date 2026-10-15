@@ -55,7 +55,7 @@ async def test_voice_reply_uses_picks_page_and_voice_note(session: RepoSession) 
     talker = FakeTalker.instances[-1]
     prompt = talker.prompts[-1]
     assert talker.spoken == [True]
-    assert "[Voice] This turn was spoken" in prompt
+    assert prompt.startswith("[Worker] no tasks yet.")
     assert "[Voice] The user paused mid-sentence" not in prompt
     assert 'Page: "Cards" — http://localhost:5173/cards' in prompt
     assert "A screenshot" not in prompt
@@ -106,10 +106,11 @@ async def test_voice_and_typed_turns_are_serialised(session: RepoSession) -> Non
     typed = session.submit_user_text("chat")  # interrupts the voice reply first (SPEC §9.2)
     rest = await collect(stream)
     await typed
-    talker = FakeTalker.instances[-1]
+    call_talker, typed_talker = FakeTalker.instances[-2:]
     assert rest == ""
-    assert talker.interrupts == 1
-    assert [p.splitlines()[-1] for p in talker.prompts] == ["User: hang", "User: chat"]
+    assert call_talker.interrupts == 1
+    assert [p.splitlines()[-1] for p in call_talker.prompts] == ["User: hang"]
+    assert [p.splitlines()[-1] for p in typed_talker.prompts] == ["User: chat"]
 
 
 async def test_task_events_feed_the_announcer_and_notify(session: RepoSession) -> None:
@@ -176,3 +177,22 @@ async def test_warm_talker_connects_once(session: RepoSession) -> None:
     assert FakeTalker.instances[-1].warmed == 1
     await collect(session.voice_reply("chat", [], continuation=False))
     assert len(FakeTalker.instances) == 1
+
+
+async def test_call_talker_is_seeded_once_then_rotated(
+    session: RepoSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sidecall.session.MAX_CALL_TALKER_TURNS", 2)
+    session._add_transcript("user", "make it red")  # pyright: ignore[reportPrivateUsage]
+    session._add_transcript("agent", "On it.")  # pyright: ignore[reportPrivateUsage]
+    await collect(session.voice_reply("chat", [], continuation=False))
+    first = FakeTalker.instances[-1]
+    assert first.prompts[-1].startswith(
+        "[Earlier in this call]\nThey said: make it red\nYou said: On it.\n[Worker]"
+    )
+    await collect(session.voice_reply("chat", [], continuation=False))
+    assert first.prompts[-1].startswith("[Worker]")
+    # the third turn gets a fresh talker, seeded again
+    await collect(session.voice_reply("chat", [], continuation=False))
+    assert FakeTalker.instances[-1] is not first
+    assert FakeTalker.instances[-1].prompts[-1].startswith("[Earlier in this call]")

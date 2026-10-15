@@ -22,10 +22,14 @@ from .config import RepoDirs
 from .paths import normalise_brief
 from .picks import PickStore, load_snapshot, normalise_pick, save_snapshot
 from .prompts import (
+    CALL_HISTORY_TURNS,
     UNDO_BRIEF,
     PickRef,
     interrupted_note,
+    render_call_history,
+    render_call_turn,
     render_talker_turn,
+    render_worker_status,
     task_note,
 )
 from .protocol.messages import (
@@ -120,6 +124,8 @@ MAX_TURN_IMAGES = 6
 """Images per talker turn, the page screenshot included."""
 MAX_WORKER_PICKS_WITH_VIEWPORT = 6
 MAX_WORKER_IMAGES = 20
+MAX_CALL_TALKER_TURNS = 20
+"""Turns before the call talker is replaced by a fresh one seeded with recent history."""
 # User turns kept for the next task's "what the user said" (older ones are dropped).
 MAX_SAID_TURNS = 8
 
@@ -147,6 +153,7 @@ class RepoSession:
         talker_model: str | None = None,
         worker_model: str | None = None,
         call_talker_model: str | None = None,
+        call_talker_factory: TalkerFactory | None = None,
     ) -> None:
         self.repo_path = repo_path
         self.dirs = RepoDirs.create(home, repo_path)
@@ -156,6 +163,8 @@ class RepoSession:
         self.worker_model = worker_model
         self._emit = emit
         self._talker_factory = talker_factory
+        # Spoken turns get a talker of their own, fresh for each call (SPEC §6.3).
+        self._call_talker_factory = call_talker_factory or talker_factory
         self._worker_factory = worker_factory
 
         self.queue = TaskQueue(self.dirs.queue)
@@ -177,6 +186,10 @@ class RepoSession:
         self._call_page: PageContext | None = None
 
         self._talker: Talker | None = None
+        self._call_talker: Talker | None = None
+        self._busy_talker: Talker | None = None  # the one running the current turn
+        self._call_turns = 0  # turns the current call talker has had
+        self._call_started_ms = 0.0
         self._worker: Worker | None = None
         self._talker_lock = asyncio.Lock()
         self._talker_busy = False
@@ -211,11 +224,11 @@ class RepoSession:
             self._runner = None
         for t in list(self._bg):
             t.cancel()
-        for client in (self._talker, self._worker):
+        for client in (self._talker, self._call_talker, self._worker):
             if client is not None:
                 with contextlib.suppress(Exception):
                     await client.close()
-        self._talker = self._worker = None
+        self._talker = self._call_talker = self._worker = None
 
     # --- state ---
 
@@ -368,9 +381,8 @@ class RepoSession:
         self, text: str, page: PageContext | None = None, refs: Sequence[PickRef] = ()
     ) -> None:
         # A new user turn interrupts the talker's current reply (SPEC §9.2).
-        if self._talker_busy and self._talker is not None:
-            with contextlib.suppress(Exception):
-                await self._talker.interrupt()
+        if self._talker_busy:
+            await self._interrupt_talker()
         async with self._talker_lock:
             await self._run_talker_turn(text, page, refs)
 
@@ -435,15 +447,17 @@ class RepoSession:
 
     def attach_call(self, call: Call) -> None:
         self._call = call
+        self._call_started_ms = _now_ms()
+        self._call_turns = 0
 
     def warm_talker(self) -> None:
-        """A call connected: connect the talker now rather than on the first turn."""
+        """A call connected: connect its talker now rather than on the first turn."""
 
         async def warm() -> None:
-            if self._talker is None:
-                self._talker = self._talker_factory(self)
+            if self._call_talker is None:
+                self._call_talker = self._call_talker_factory(self)
             try:
-                await self._talker.warm()
+                await self._call_talker.warm()
             except Exception:
                 log.warning("talker warm-up failed", exc_info=True)
 
@@ -455,6 +469,43 @@ class RepoSession:
         if self._call is call:
             self._call = None
             self._call_page = None
+            self._retire_call_talker()
+
+    def _retire_call_talker(self) -> None:
+        """Close the call talker once any turn it's running has finished."""
+        talker, self._call_talker = self._call_talker, None
+        self._call_turns = 0
+        if talker is None:
+            return
+
+        async def close() -> None:
+            async with self._talker_lock:
+                with contextlib.suppress(Exception):
+                    await talker.close()
+
+        task = asyncio.create_task(close())
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
+
+    def _call_context(self, *, user_turn: bool) -> tuple[str | None, str]:
+        """(history, status) for the next call-talker turn. A fresh talker (the call's
+        first turn, or after MAX_CALL_TALKER_TURNS) gets the call so far as history. A
+        user turn's own entry is already in the transcript, so it's left out."""
+        if self._call_turns >= MAX_CALL_TALKER_TURNS:
+            log.info("call talker rotated after %d turns", self._call_turns)
+            self._retire_call_talker()
+        history = None
+        if self._call_talker is None or self._call_turns == 0:
+            entries = [
+                (e.role, e.text)
+                for e in self.transcript.recent()
+                if e.ts >= self._call_started_ms and e.role in ("user", "agent")
+            ]
+            if user_turn and entries and entries[-1][0] == "user":
+                entries.pop()
+            history = render_call_history(entries[-CALL_HISTORY_TURNS:])
+        self._call_turns += 1
+        return history, render_worker_status(self.queue.all_tasks())
 
     def set_call_page(self, page: PageContext) -> None:
         """call.page: remember the page in view; ignored without an active call."""
@@ -491,24 +542,20 @@ class RepoSession:
         refs = self.picks.resolve(pick_ids)
         picks = [r for r in refs if isinstance(r, Pick)]
         page = self._voice_page(picks)
-        attached = False
 
         def build(notes: list[str]) -> str:
-            return render_talker_turn(
+            history, status = self._call_context(user_turn=True)
+            return render_call_turn(
                 text,
                 notes,
                 picks=refs,
                 page=page,
-                screenshot_attached=attached,
-                spoken=True,
+                status=status,
+                history=history,
                 continuation=continuation,
             )
 
-        def on_image(found: bool) -> None:
-            nonlocal attached
-            attached = found
-
-        return self._voice_stream(build, picks, page, on_image)
+        return self._voice_stream(build, picks, page)
 
     def voice_announcement(self, *, opening: bool) -> AsyncGenerator[str, None] | None:
         """One spoken update for every pending announcement (SPEC §6.7), or None."""
@@ -517,7 +564,9 @@ class RepoSession:
         events = self.announcer.take()
 
         def build(notes: list[str]) -> str:
-            return render_announcement(events, notes, opening=opening)
+            history, status = self._call_context(user_turn=False)
+            head = [history] if history else []
+            return "\n".join([*head, status, render_announcement(events, notes, opening=opening)])
 
         return self._voice_stream(build, [], None)
 
@@ -526,8 +575,9 @@ class RepoSession:
         build: Callable[[list[str]], str],
         picks: Sequence[Pick],
         page: PageContext | None,
-        on_image: Callable[[bool], None] | None = None,
     ) -> AsyncGenerator[str, None]:
+        """Run a call-talker turn and stream its text. No images go to the call talker
+        (they cost ~4x per turn); the page and picks still reach any task it dispatches."""
         queue: asyncio.Queue[str | None] = asyncio.Queue()
         talking = asyncio.Event()
 
@@ -535,17 +585,9 @@ class RepoSession:
             try:
                 async with self._talker_lock:
                     notes = self._take_notes()
-                    image: Image | None = None
-                    if on_image is not None and page is not None and page.screenshot:
-                        image = await asyncio.to_thread(self.uploads.load, page.screenshot)
-                        if image is None:
-                            log.warning("call screenshot %s not found", page.screenshot)
-                        on_image(image is not None)
-                    limit = MAX_TURN_IMAGES - (1 if image is not None else 0)
-                    crops = await asyncio.to_thread(self._crops, picks, limit)
                     talking.set()
                     await self._invoke_talker(
-                        build(notes), queue.put_nowait, image, crops, notes, page, picks, True
+                        build(notes), queue.put_nowait, None, [], notes, page, picks, True
                     )
             finally:
                 queue.put_nowait(None)
@@ -570,9 +612,10 @@ class RepoSession:
                     task.cancel()
 
     async def _interrupt_talker(self) -> None:
-        if self._talker is not None:
+        """Stop whichever talker (typed or call) is running a turn."""
+        if self._busy_talker is not None:
             with contextlib.suppress(Exception):
-                await self._talker.interrupt()
+                await self._busy_talker.interrupt()
 
     async def _invoke_talker(
         self,
@@ -592,13 +635,23 @@ class RepoSession:
         self._turn_picks = list(picks)
         self._turn_dispatched = {}
         try:
-            if self._talker is None:
-                self._talker = self._talker_factory(self)
-            return await self._talker.reply(prompt, on_delta, image, crops, spoken=spoken)
+            if spoken:
+                if self._call_talker is None:
+                    self._call_talker = self._call_talker_factory(self)
+                talker = self._call_talker
+            else:
+                if self._talker is None:
+                    self._talker = self._talker_factory(self)
+                talker = self._talker
+            self._busy_talker = talker
+            return await talker.reply(prompt, on_delta, image, crops, spoken=spoken)
         except Exception as exc:
             log.exception("talker turn failed")
             self._unseen = notes + self._unseen
-            talker, self._talker = self._talker, None
+            if spoken:
+                talker, self._call_talker = self._call_talker, None
+            else:
+                talker, self._talker = self._talker, None
             if talker is not None:
                 with contextlib.suppress(Exception):
                     await talker.close()
@@ -607,6 +660,7 @@ class RepoSession:
         finally:
             if self._turn_dispatched:
                 self._said = []
+            self._busy_talker = None
             self._talker_busy = False
             self._turn_page = None
             self._turn_picks = []

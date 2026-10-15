@@ -27,7 +27,12 @@ from claude_agent_sdk import (
 from pydantic import ValidationError
 
 from .costs import CostTracker
-from .prompts import TALKER_SYSTEM_PROMPT, brief_tool_schema, pick_payload_json
+from .prompts import (
+    CALL_TALKER_SYSTEM_PROMPT,
+    TALKER_SYSTEM_PROMPT,
+    brief_tool_schema,
+    pick_payload_json,
+)
 from .protocol.models import Brief, Task
 from .session import OnDelta
 from .uploads import Image, LabelledImage, sdk_prompt
@@ -48,6 +53,9 @@ TOOL_NAMES = [
     "get_pick",
 ]
 MCP_TOOL_NAMES = [f"mcp__{SERVER_NAME}__{name}" for name in TOOL_NAMES]
+CALL_TOOL_NAMES = ["dispatch_task", "cancel_task", "request_undo"]
+"""The call talker's tools: the [Worker] status line replaces list_tasks and
+get_task_status, and the pick summaries replace get_pick."""
 DISALLOWED_TOOLS = ["Edit", "Write", "Bash", "NotebookEdit"]
 
 
@@ -71,7 +79,7 @@ def task_summary(task: Task) -> dict[str, Any]:
     return out
 
 
-def build_tools(session: RepoSession) -> list[SdkMcpTool[Any]]:
+def build_tools(session: RepoSession, names: Sequence[str] = TOOL_NAMES) -> list[SdkMcpTool[Any]]:
     """The talker's custom tools, bound to one repo session."""
 
     @tool(
@@ -147,12 +155,13 @@ def build_tools(session: RepoSession) -> list[SdkMcpTool[Any]]:
             return _text("No pick with that id (it may have been cleared).", error=True)
         return _text(pick_payload_json(pick))
 
-    return [dispatch_task, list_tasks, get_task_status, cancel_task, request_undo, get_pick]
+    tools = [dispatch_task, list_tasks, get_task_status, cancel_task, request_undo, get_pick]
+    return [t for t in tools if t.name in names]
 
 
-def build_mcp_server(session: RepoSession) -> dict[str, Any]:
+def build_mcp_server(session: RepoSession, names: Sequence[str] = TOOL_NAMES) -> dict[str, Any]:
     server: McpSdkServerConfig = create_sdk_mcp_server(
-        name=SERVER_NAME, version="0.1.0", tools=build_tools(session)
+        name=SERVER_NAME, version="0.1.0", tools=build_tools(session, names)
     )
     config: dict[str, Any] = dict(server)
     # Extra keys (except `instance`) are forwarded to the CLI. Without alwaysLoad the
@@ -309,13 +318,17 @@ class TurnTiming:
 
 
 class ClaudeTalker:
+    """The typed-turn talker: one resumed session per repo, with code reading and
+    screenshots. `CallTalker` handles spoken turns."""
+
+    persist_session = True
+
     def __init__(self, session: RepoSession) -> None:
         self.session = session
         self._client: ClaudeSDKClient | None = None
         self._in_turn = False
         self._abort = False
         self._connect_lock = asyncio.Lock()
-        self._model: str | None = None
         self._costs = CostTracker()
         self.timings: list[TurnTiming] = []
 
@@ -341,21 +354,12 @@ class ClaudeTalker:
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
                 self._client = client
-                self._model = self.session.talker_model
                 self._costs.reset()
             return self._client
 
-    async def _use_model(self, client: ClaudeSDKClient, spoken: bool) -> None:
-        """Typed turns use the talker model and spoken ones the (faster) call model. One
-        session serves both, so switching keeps the conversation."""
-        model = self.session.call_talker_model if spoken else self.session.talker_model
-        if model != self._model:
-            await client.set_model(model)
-            self._model = model
-
     async def warm(self) -> None:
         """Connect ahead of the first turn (a voice call starting)."""
-        await self._use_model(await self._ensure_client(), spoken=True)
+        await self._ensure_client()
 
     async def reply(
         self,
@@ -385,7 +389,6 @@ class ClaudeTalker:
 
         try:
             client = await self._ensure_client()
-            await self._use_model(client, spoken)
             t0 = time.perf_counter()
             await client.query(sdk_prompt(prompt, image, extra_images))
             if self._abort:  # interrupted while connecting or sending
@@ -411,7 +414,8 @@ class ClaudeTalker:
                     cost = self._costs.record(msg.total_cost_usd, msg.usage)
                     timing.cost_usd = msg.total_cost_usd
                     timing.turn_cost = cost.turn_cost
-                    self.session.sessions.set_talker_session(msg.session_id)
+                    if self.persist_session:
+                        self.session.sessions.set_talker_session(msg.session_id)
                     log.info(
                         "talker turn subtype=%s terminal=%s first_text=%.2fs %s%s",
                         msg.subtype,
@@ -448,3 +452,26 @@ class ClaudeTalker:
         if client is not None:
             with contextlib.suppress(Exception):
                 await client.disconnect()
+
+
+class CallTalker(ClaudeTalker):
+    """The talker for one voice call: a fast model and a small, fresh context. No code
+    reading, no images and no CLAUDE.md, and nothing resumed: the session seeds its first
+    turn with the call so far and every turn with a [Worker] status line (SPEC §6.3)."""
+
+    persist_session = False
+
+    def options(self) -> ClaudeAgentOptions:
+        return ClaudeAgentOptions(
+            cwd=self.session.repo_path,
+            model=self.session.call_talker_model,
+            system_prompt=CALL_TALKER_SYSTEM_PROMPT,
+            tools=[],
+            allowed_tools=[f"mcp__{SERVER_NAME}__{name}" for name in CALL_TOOL_NAMES],
+            disallowed_tools=[*READ_TOOLS, *DISALLOWED_TOOLS],
+            mcp_servers={SERVER_NAME: build_mcp_server(self.session, CALL_TOOL_NAMES)},  # pyright: ignore[reportArgumentType]
+            thinking={"type": "disabled"},
+            include_partial_messages=True,
+            setting_sources=[],
+            verbatim_prompts=True,
+        )

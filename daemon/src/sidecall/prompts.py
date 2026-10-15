@@ -456,6 +456,103 @@ def render_talker_turn(
     return "\n".join(lines)
 
 
+# --- call talker (voice) -------------------------------------------------------------
+
+CALL_TALKER_SYSTEM_PROMPT = """\
+You are On it's voice assistant, on a call with the user. They're prototyping a local web \
+app. A background worker (Claude Code) makes every code change; you can't read code or \
+see the screen. Your jobs: acknowledge, clarify, dispatch and announce.
+
+- When they ask for a change, say one short sentence ("On it, making the header sticky.") \
+and call dispatch_task in the same message, with nothing after it. Build the brief from \
+their words, the picks and the page; the worker finds the code.
+- If a request is genuinely ambiguous, ask one short question instead. If the change \
+belongs in a shared component used beyond this page (a pick's source is a shared ui or \
+components file) and they didn't say, ask "Just here, or everywhere?", then write the \
+answer into the brief's changes.
+- If they're thinking out loud or asking your opinion, answer briefly like a colleague, \
+and dispatch once they say go.
+- [n] markers are elements they pointed at while speaking, listed under "Picks:". Put \
+them in the brief's targets with pick_id, file, line and component. A pick "repeated N×" \
+is one instance of a template: change the template unless they say "just this one".
+- [Worker] lines show what the worker is doing; [System] lines are task updates. Mention \
+finished or failed tasks in a few words. Never say something is done until a task \
+completed. If they ask about a running task, say it's in progress; don't dispatch it again.
+- Use cancel_task to stop a task and request_undo to undo the last change, when asked.
+- Speak in one short sentence, two at most: plain words, no markdown, lists or code. \
+Never narrate what you're doing.
+"""
+
+CALL_HISTORY_TURNS = 10
+"""Transcript entries from the current call given to a fresh call talker."""
+
+
+def render_worker_status(tasks: Sequence[Task], recent: int = 3) -> str:
+    """One compact line on the worker: running, queued, and the last few finished tasks."""
+    running = [t for t in tasks if t.status in ("running", "blocked")]
+    queued = [t for t in tasks if t.status == "queued"]
+    done = sorted(
+        (t for t in tasks if t.status in ("completed", "failed", "cancelled")),
+        key=lambda t: t.finished_at or t.created_at,
+    )[-recent:]
+    parts: list[str] = []
+    for t in running:
+        doing = "waiting for the user's approval" if t.status == "blocked" else t.last_event
+        parts.append(f"running '{t.title}'" + (f" ({_clip(doing, 60)})" if doing else ""))
+    if queued:
+        parts.append("queued " + ", ".join(f"'{t.title}'" for t in queued))
+    for t in done:
+        if t.status == "completed":
+            parts.append(
+                f"'{t.title}' completed: {_clip(_first_sentence(t.summary or 'done'), 100)}"
+            )
+        elif t.status == "failed":
+            parts.append(f"'{t.title}' failed: {_clip(t.error or 'unknown error', 100)}")
+        else:
+            parts.append(f"'{t.title}' was cancelled")
+    return "[Worker] " + ("; ".join(parts) if parts else "no tasks yet") + "."
+
+
+def _first_sentence(text: str) -> str:
+    text = " ".join(text.split())
+    for i, ch in enumerate(text):
+        if ch in ".!?" and (i + 1 == len(text) or text[i + 1] == " "):
+            return text[: i + 1]
+    return text
+
+
+def render_call_history(entries: Sequence[tuple[str, str]]) -> str | None:
+    """Earlier turns of this call, for a fresh call talker: (role, text) pairs."""
+    lines = [
+        f"{'They said' if role == 'user' else 'You said'}: {_clip(text, 300)}"
+        for role, text in entries
+        if text.strip()
+    ]
+    return "[Earlier in this call]\n" + "\n".join(lines) if lines else None
+
+
+def render_call_turn(
+    text: str,
+    notes: Sequence[str] = (),
+    picks: Sequence[PickRef] = (),
+    page: PageContext | None = None,
+    *,
+    status: str,
+    history: str | None = None,
+    continuation: bool = False,
+) -> str:
+    """One spoken user turn for the call talker: no images, no code reading."""
+    lines = [history] if history else []
+    lines += [*notes, status]
+    if continuation:
+        lines.append(CONTINUATION_NOTE)
+    if page is not None:
+        lines.append(f"Page: {render_page(page)}")
+    lines.append(f"User: {text}")
+    lines += render_picks_section(picks)
+    return "\n".join(lines)
+
+
 def task_note(task: Task) -> str:
     """System note telling the talker how a task ended."""
     if task.status == "completed":
