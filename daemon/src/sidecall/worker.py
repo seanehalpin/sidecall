@@ -24,6 +24,7 @@ from claude_agent_sdk import (
 )
 
 from .classifier import EDIT_TOOLS, classify
+from .costs import CostTracker
 from .paths import rel_path
 from .prompts import WORKER_SYSTEM_APPEND, render_worker_prompt
 from .protocol.messages import TaskEventKind
@@ -109,6 +110,7 @@ class ClaudeWorker:
         self.repo = session.repo_path
         self._client: ClaudeSDKClient | None = None
         self._task_id: str | None = None
+        self._costs = CostTracker()
 
     # The hook and the permission callback both read the live preset, so a settings
     # change applies to the next tool call.
@@ -174,6 +176,7 @@ class ClaudeWorker:
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
             self._client = client
+            self._costs.reset()
         return self._client
 
     async def run(self, task: Task, on_event: OnEvent) -> WorkerResult:
@@ -202,7 +205,12 @@ class ClaudeWorker:
                             on_event("text", truncate(block.text))
                 elif isinstance(msg, ResultMessage):
                     result = msg
-        except Exception:
+        except BaseException:
+            log.info(
+                "worker turn for task %s ended without a result %s",
+                task.id,
+                CostTracker.unknown().log_fields(),
+            )
             await self._drop_client()
             raise
         finally:
@@ -222,11 +230,13 @@ class ClaudeWorker:
         if result is None:
             return WorkerResult("failed", files=files, error="The worker stopped without a result")
         self.session.sessions.set_worker_session(result.session_id)
+        cost = self._costs.record(result.total_cost_usd, result.usage)
         log.info(
-            "worker result subtype=%s error=%s cost=$%s",
+            "worker result subtype=%s error=%s terminal=%s %s",
             result.subtype,
             result.is_error,
-            result.total_cost_usd,
+            result.terminal_reason,
+            cost.log_fields(),
         )
         if (result.terminal_reason or "").startswith("aborted"):
             return WorkerResult("cancelled", files=files)

@@ -26,6 +26,7 @@ from claude_agent_sdk import (
 )
 from pydantic import ValidationError
 
+from .costs import CostTracker
 from .prompts import TALKER_SYSTEM_PROMPT, brief_tool_schema, pick_payload_json
 from .protocol.models import Brief, Task
 from .session import OnDelta
@@ -303,6 +304,8 @@ class TurnTiming:
     result: float | None = None
     spoken: bool = False
     cost_usd: float | None = None
+    """The session's running total after this turn."""
+    turn_cost: float | None = None
 
 
 class ClaudeTalker:
@@ -313,6 +316,7 @@ class ClaudeTalker:
         self._abort = False
         self._connect_lock = asyncio.Lock()
         self._model: str | None = None
+        self._costs = CostTracker()
         self.timings: list[TurnTiming] = []
 
     def options(self) -> ClaudeAgentOptions:
@@ -338,6 +342,7 @@ class ClaudeTalker:
                 await client.connect()
                 self._client = client
                 self._model = self.session.talker_model
+                self._costs.reset()
             return self._client
 
     async def _use_model(self, client: ClaudeSDKClient, spoken: bool) -> None:
@@ -370,6 +375,7 @@ class ClaudeTalker:
         timing = TurnTiming(spoken=spoken)
         self.timings.append(timing)
         t0 = time.perf_counter()
+        got_result = False
 
         def emit(text: str) -> None:
             if timing.first_release is None:
@@ -400,15 +406,18 @@ class ClaudeTalker:
                 elif isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:
                     fallback.extend(b.text for b in msg.content if isinstance(b, TextBlock))
                 elif isinstance(msg, ResultMessage):
+                    got_result = True
                     timing.result = time.perf_counter() - t0
+                    cost = self._costs.record(msg.total_cost_usd, msg.usage)
                     timing.cost_usd = msg.total_cost_usd
+                    timing.turn_cost = cost.turn_cost
                     self.session.sessions.set_talker_session(msg.session_id)
                     log.info(
-                        "talker turn subtype=%s cost=$%s terminal=%s first_text=%.2fs%s",
+                        "talker turn subtype=%s terminal=%s first_text=%.2fs %s%s",
                         msg.subtype,
-                        msg.total_cost_usd,
                         msg.terminal_reason,
                         timing.first_release or -1,
+                        cost.log_fields(),
                         " (spoken)" if spoken else "",
                     )
         except Exception:
@@ -416,6 +425,13 @@ class ClaudeTalker:
             raise
         finally:
             self._in_turn = False
+            if not got_result:
+                log.info(
+                    "talker turn ended without a result first_text=%.2fs %s%s",
+                    timing.first_release or -1,
+                    CostTracker.unknown().log_fields(),
+                    " (spoken)" if spoken else "",
+                )
         if streamed:
             return "".join(streamed)
         return " ".join(t.strip() for t in fallback if t.strip())
