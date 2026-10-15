@@ -44,6 +44,8 @@ class FakeTalker:
         self.interrupts = 0
         self.spoken: list[bool] = []
         self.warmed = 0
+        self.wound_down = 0
+        self._dispatching = False
         self._interrupted = asyncio.Event()
         FakeTalker.instances.append(self)
 
@@ -75,6 +77,10 @@ class FakeTalker:
             on_delta("there.")
             return "Hello there."
         on_delta("On it. ")
+        if text.startswith("pause: "):  # the model still writing its tool call
+            self._dispatching = True
+            await asyncio.sleep(0.05)
+            self._dispatching = False
         self.session.dispatch(make_brief(text))
         on_delta("Queued.")
         return "On it. Queued."
@@ -82,6 +88,13 @@ class FakeTalker:
     async def interrupt(self) -> None:
         self.interrupts += 1
         self._interrupted.set()
+
+    async def wind_down(self) -> None:
+        # Like ClaudeTalker: a turn with no tool call coming stops now; "pause: …" turns,
+        # which dispatch after their confirmation, finish the dispatch first.
+        self.wound_down += 1
+        if not self._dispatching:
+            await self.interrupt()
 
     async def warm(self) -> None:
         self.warmed += 1

@@ -477,7 +477,12 @@ them in the brief's targets with pick_id, file, line and component. A pick "repe
 is one instance of a template: change the template unless they say "just this one".
 - [Worker] lines show what the worker is doing; [System] lines are task updates. Mention \
 finished or failed tasks in a few words. Never say something is done until a task \
-completed. If they ask about a running task, say it's in progress; don't dispatch it again.
+completed.
+- Hanging up or talking over you never cancels a task. If they correct or add to a task \
+that's queued or running ("actually, make it darker"), dispatch the correction as a new \
+task titled "Follow-up: <original title>", whose goal says what to change relative to \
+it; the worker does it after the original. If they only ask about a running task, say \
+it's in progress; don't dispatch it again.
 - Use cancel_task to stop a task and request_undo to undo the last change, when asked.
 - Speak in one short sentence, two at most: plain words, no markdown, lists or code. \
 Never narrate what you're doing.

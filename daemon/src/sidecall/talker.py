@@ -21,6 +21,7 @@ from claude_agent_sdk import (
     SdkMcpTool,
     StreamEvent,
     TextBlock,
+    ToolUseBlock,
     create_sdk_mcp_server,
     tool,
 )
@@ -168,6 +169,12 @@ def build_mcp_server(session: RepoSession, names: Sequence[str] = TOOL_NAMES) ->
     # tools sit behind ToolSearch, which costs 2-3 s per first use (spike 5).
     config["alwaysLoad"] = True
     return config
+
+
+def wind_down_waits_for_tools(content: Sequence[object]) -> bool:
+    """Whether a winding-down turn should let this message's tool calls run (a dispatch,
+    cancel or undo the user already heard confirmed) before stopping."""
+    return any(isinstance(b, ToolUseBlock) for b in content)
 
 
 def _is_text_delta(event: dict[str, Any]) -> bool:
@@ -330,6 +337,7 @@ class ClaudeTalker:
         self._abort = False
         self._connect_lock = asyncio.Lock()
         self._costs = CostTracker()
+        self._winding_down = False
         self.timings: list[TurnTiming] = []
 
     def options(self) -> ClaudeAgentOptions:
@@ -372,6 +380,8 @@ class ClaudeTalker:
     ) -> str:
         self._in_turn = True
         self._abort = False
+        self._winding_down = False
+        stop_at_next_message = False
         streamed: list[str] = []
         fallback: list[str] = []
         narration = NarrationFilter()
@@ -398,6 +408,11 @@ class ClaudeTalker:
                     if msg.parent_tool_use_id is not None:
                         continue
                     event = msg.event
+                    if stop_at_next_message and event.get("type") == "message_start":
+                        # The tool has run (in-process tools finish before the next
+                        # request), so the dispatch is in; skip the follow-up text.
+                        stop_at_next_message = False
+                        await client.interrupt()
                     if timing.first_delta is None and _is_text_delta(event):
                         timing.first_delta = time.perf_counter() - t0
                     held = narration.feed(event)
@@ -408,6 +423,11 @@ class ClaudeTalker:
                         emit(text)
                 elif isinstance(msg, AssistantMessage) and msg.parent_tool_use_id is None:
                     fallback.extend(b.text for b in msg.content if isinstance(b, TextBlock))
+                    if self._winding_down and not stop_at_next_message:
+                        if wind_down_waits_for_tools(msg.content):
+                            stop_at_next_message = True
+                        else:
+                            await client.interrupt()
                 elif isinstance(msg, ResultMessage):
                     got_result = True
                     timing.result = time.perf_counter() - t0
@@ -439,6 +459,13 @@ class ClaudeTalker:
         if streamed:
             return "".join(streamed)
         return " ".join(t.strip() for t in fallback if t.strip())
+
+    async def wind_down(self) -> None:
+        """Stop the turn without losing what it has decided: nobody is listening any more
+        (hang-up, teardown, barge-in), but a dispatch the reply is making must land. The
+        message being written is finished; if it calls tools they run, then the turn stops."""
+        if self._in_turn:
+            self._winding_down = True
 
     async def interrupt(self) -> None:
         if not self._in_turn:

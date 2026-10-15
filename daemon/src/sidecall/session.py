@@ -103,6 +103,11 @@ class Talker(Protocol):
         """Get ready for a turn (connect), so the first spoken reply isn't slower."""
         ...
 
+    async def wind_down(self) -> None:
+        """Nobody is listening any more: stop the turn, but let a tool call it's making
+        (a dispatch) run first."""
+        ...
+
     async def close(self) -> None: ...
 
 
@@ -531,8 +536,9 @@ class RepoSession:
     def _notify_action(self) -> NotifyAction:
         return "open" if self._call is not None else "call"
 
-    def has_announcements(self) -> bool:
-        return bool(self.announcer)
+    def has_announcements(self, *, opening: bool = False) -> bool:
+        """Pending announcements; at a call's opening, tasks still in flight count too."""
+        return bool(self.announcer) or (opening and bool(self.queue.active))
 
     def voice_interrupted(self, heard: str) -> None:
         self._unseen.append(interrupted_note(heard))
@@ -574,8 +580,9 @@ class RepoSession:
         return self._voice_stream(build, picks, page)
 
     def voice_announcement(self, *, opening: bool) -> AsyncGenerator[str, None] | None:
-        """One spoken update for every pending announcement (SPEC §6.7), or None."""
-        if not self.announcer:
+        """One spoken update for every pending announcement (SPEC §6.7), or None. A call's
+        opening also reports tasks still in flight, from the [Worker] line."""
+        if not self.has_announcements(opening=opening):
             return None
         events = self.announcer.take()
 
@@ -618,14 +625,21 @@ class RepoSession:
             finished = True
         finally:
             if not finished and not task.done():
-                # Closed early (the user interrupted): stop the talker's turn. It ends
-                # with an aborted result about 10 ms later and releases the lock.
+                # Closed early (a barge-in, a hang-up or the pipeline shutting down):
+                # wind the talker's turn down rather than cutting it off, so a dispatch
+                # it already confirmed ("On it, …") still lands. It releases the lock
+                # once the turn ends.
                 if talking.is_set():
-                    stop = asyncio.create_task(self._interrupt_talker())
+                    stop = asyncio.create_task(self._wind_down_talker())
                     self._bg.add(stop)
                     stop.add_done_callback(self._bg.discard)
                 else:
                     task.cancel()
+
+    async def _wind_down_talker(self) -> None:
+        if self._busy_talker is not None:
+            with contextlib.suppress(Exception):
+                await self._busy_talker.wind_down()
 
     async def _interrupt_talker(self) -> None:
         """Stop whichever talker (typed or call) is running a turn."""

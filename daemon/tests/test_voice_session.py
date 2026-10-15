@@ -208,3 +208,22 @@ async def test_finished_tasks_go_in_the_task_log(session: RepoSession) -> None:
     assert entry.title == task.title and entry.status == "completed"
     assert entry.request.endswith("(user said: make it red)")
     assert "Earlier tasks in this repo" in session.worker_seed()
+
+
+async def test_hang_up_after_on_it_still_dispatches(session: RepoSession) -> None:
+    """The 13:59:28 bug: "On it" is spoken, the user hangs up (the pipeline closes the
+    reply stream) before the talker has emitted its tool call. The task must still run."""
+    stream = session.voice_reply("pause: add a dark mode toggle", [], continuation=False)
+    assert await anext(stream) == "On it. "
+    await stream.aclose()  # what pipeline cancellation does to the reply
+    session.detach_call(session._call)  # pyright: ignore[reportPrivateUsage, reportArgumentType]
+    for _ in range(100):
+        await asyncio.sleep(0.01)
+        done = [t for t in session.queue.all_tasks() if t.status == "completed"]
+        if done:
+            break
+    [task] = session.queue.all_tasks()
+    assert task.title == "pause: add a dark mode toggle"
+    assert task.status == "completed"
+    assert FakeTalker.instances[-1].wound_down == 1
+    assert FakeTalker.instances[-1].interrupts == 0

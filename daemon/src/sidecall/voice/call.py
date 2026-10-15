@@ -155,7 +155,7 @@ class CallSession(Protocol):
         """Tell the talker (next turn) how much of its reply the user heard."""
         ...
 
-    def has_announcements(self) -> bool: ...
+    def has_announcements(self, *, opening: bool = False) -> bool: ...
 
     def warm_talker(self) -> None:
         """The call connected: get the talker ready for the first turn."""
@@ -531,15 +531,15 @@ class Call:
             or bool(self.tracker.open)
             or self.session.talker_busy
         )
+        opening = self.user_turns == 0 and self.announcements == 0
         if not announcement_due(
             now,
-            pending=self.session.has_announcements(),
+            pending=self.session.has_announcements(opening=opening),
             user_speaking=self._user_speaking,
             agent_busy=busy,
             last_user_activity=self._last_user_activity,
         ):
             return
-        opening = self.user_turns == 0 and self.announcements == 0
         stream = self.session.voice_announcement(opening=opening)
         if stream is None:
             return

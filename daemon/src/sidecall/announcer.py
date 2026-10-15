@@ -145,11 +145,17 @@ def render_announcement(
         if opening
         else "The user is in a voice call and has paused."
     )
+    in_flight = " Then say what's still in progress, from the [Worker] line." if opening else ""
+    if events:
+        update = (
+            "give them a spoken update about the tasks above in one short sentence, most "
+            f'urgent first, and batch them, like "{batch_phrase(events)}" Use the task names '
+            f"naturally. If something failed or needs their OK, say so.{in_flight}"
+        )
+    else:
+        update = "tell them in one short sentence what's still in progress, from the [Worker] line."
     lines.append(
-        f"[System] {when} Nobody asked anything: give them a spoken update about the tasks "
-        "above in one short sentence, most urgent first, and batch them, like "
-        f'"{batch_phrase(events)}" Use the task names naturally. If something needs '
-        "their OK, say so. Don't call any tools and don't ask a question unless something "
-        "needs their OK."
+        f"[System] {when} Nobody asked anything: {update} Don't call any tools and don't ask "
+        "a question unless something needs their OK."
     )
     return "\n".join(lines)

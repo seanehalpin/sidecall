@@ -181,7 +181,7 @@ class FakeSession:
     def voice_interrupted(self, heard: str) -> None:
         self.interruptions.append(heard)
 
-    def has_announcements(self) -> bool:
+    def has_announcements(self, *, opening: bool = False) -> bool:
         return self.pending_announcements > 0
 
     def warm_talker(self) -> None:
