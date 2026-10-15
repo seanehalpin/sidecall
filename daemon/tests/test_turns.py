@@ -286,3 +286,13 @@ def test_first_clause_ready() -> None:
     assert first_clause_ready("I'm not sure what you'd like to change—")
     assert first_clause_ready("The card header uses sixteen pixels of padding, ")
     assert not first_clause_ready("The card header uses sixteen pixels of padding and")
+
+
+def test_turn_hold_until_takes_the_longer_of_debounce_and_pick_hold() -> None:
+    from sidecall.voice.turns import PICK_HOLD_MS, turn_hold_until
+
+    now = 10_000.0
+    assert turn_hold_until(now, [], 0) is None
+    assert turn_hold_until(now, [], 500) == now + 500
+    assert turn_hold_until(now, [PickTime(1, now - 100)], 500) == now - 100 + PICK_HOLD_MS
+    assert turn_hold_until(now, [PickTime(1, now - 900)], 500) == now + 500

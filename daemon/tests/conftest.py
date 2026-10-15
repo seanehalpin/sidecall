@@ -26,3 +26,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         for item in items:
             if marker in item.keywords:
                 item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def no_turn_debounce(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Calls submit turns at once in tests; debounce tests set `call.debounce_ms`."""
+    monkeypatch.setattr("sidecall.voice.call.TURN_DEBOUNCE_MS", 0.0)

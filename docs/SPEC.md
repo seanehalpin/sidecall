@@ -349,6 +349,7 @@ SmallWebRTC in → STT: Parakeet TDT 0.6B v3 (parakeet-mlx, offline per VAD segm
 - **Turn continuation:** Smart Turn can end a turn at a mid-sentence pause (seen at 240–420 ms pauses in spike 6). Two rules handle this:
   - If the user resumes within about 1.5 s of a turn end, and the talker hasn't produced audio yet (or only a few words), merge the continuation into the previous turn and re-submit it with the same window, picks and markers, rather than sending a second user message.
   - While a pick is in progress, or within about 1 s after one, don't end the turn on Smart Turn alone.
+  - **Debounce:** every turn is held `TURN_DEBOUNCE_MS` (500 ms, env `SIDECALL_TURN_DEBOUNCE_MS`) before the talker is asked, using the same hold as a pick. Speech in the window continues the turn with no API call, and is logged as `turn debounced` with the gap. Speech is reported only after `VAD_START_SECS` (0.2 s), so the window catches restarts within about 300 ms; later ones fall to the continuation rule above, at the cost of an aborted talker call. VAD `stop_secs` stays 0.2, as Pipecat recommends with Smart Turn.
   - These thresholds need tuning against real speech.
 - **Typed turns:** picks go to the tray; clicking a chip inserts its `[n]` marker, and typing `[n]` works too. The service worker, not the rail, decides a turn's `pickIds`: every live pick that isn't dimmed, plus any `[n]` referenced in the text that exists.
 - **After a turn:** picks stay referenceable by number (dimmed) until the task they belong to is dispatched or the user clears them.

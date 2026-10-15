@@ -407,6 +407,29 @@ async def test_speech_during_hold_continues_the_turn() -> None:
     assert session.replaced == []
 
 
+async def test_debounce_merges_a_turn_ended_too_early() -> None:
+    call, session, _sent, clock = make_call()
+    call.debounce_ms = 500
+    await call.offer("sdp")
+    speak(call, clock, "make the header", T0)  # Smart Turn ends it mid-sentence
+    assert session.requests == []  # no talker call yet
+    speak(call, clock, "sticky", T0 + 1400)  # back within the window
+    await asyncio.sleep(0.6)
+    assert session.requests == [("make the header sticky", [], False)]
+    assert call.debounced == 1
+
+
+async def test_debounce_submits_after_the_window() -> None:
+    call, session, _sent, _clock = make_call()
+    call.debounce_ms = 30
+    await call.offer("sdp")
+    speak(call, _clock, "make it red", T0)
+    assert session.requests == []
+    await asyncio.sleep(0.06)
+    assert session.requests == [("make it red", [], False)]
+    assert call.debounced == 0
+
+
 async def test_late_pick_resubmits_turn() -> None:
     call, session, _sent, clock = make_call()
     await call.offer("sdp")

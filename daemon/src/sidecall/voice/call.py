@@ -47,13 +47,14 @@ from ..protocol.messages import (
 )
 from ..protocol.models import CallState, Role
 from .turns import (
+    TURN_DEBOUNCE_MS,
     PickTime,
     Segment,
     SubmittedTurn,
     TimedWord,
     TurnTracker,
     assemble_turn,
-    pick_hold_until,
+    turn_hold_until,
 )
 
 log = logging.getLogger(__name__)
@@ -190,6 +191,8 @@ class _Held:
     segments: list[Segment]
     merged_into: SubmittedTurn | None
     handle: asyncio.TimerHandle
+    since: float
+    """When the turn ended (call clock, ms)."""
 
 
 class Call:
@@ -219,6 +222,9 @@ class Call:
         self._partials: list[str] = []
         self._agent: _AgentTurn | None = None
         self._held: _Held | None = None
+        self.debounce_ms = TURN_DEBOUNCE_MS
+        self.debounced = 0
+        """Turns that continued during their hold, so no talker call was made."""
         self._user_speaking = False
         self._bot_speaking = False
         self._last_user_activity: float | None = None
@@ -344,13 +350,14 @@ class Call:
             segments = [Segment(text.strip())]
         now = self._clock()
         self._last_user_activity = now
-        until = pick_hold_until(now, self.session.pick_times())
+        until = turn_hold_until(now, self.session.pick_times(), self.debounce_ms)
         if until is not None:
-            # A pick just happened: the user may still be pointing. Wait a moment
-            # before answering; speech in the meantime continues this turn.
+            # Wait a moment before answering: Smart Turn sometimes ends a turn
+            # mid-sentence, and after a pick the user may still be pointing. Speech in
+            # the meantime continues this turn, with no talker call made.
             delay = (until - now) / 1000.0
             handle = asyncio.get_running_loop().call_later(delay, self._release_hold)
-            self._held = _Held(segments, merged_into, handle)
+            self._held = _Held(segments, merged_into, handle, now)
             self._settle_state()
             return
         self._submit(segments, merged_into, now)
@@ -428,6 +435,12 @@ class Call:
             # The user resumed while we were holding the turn: it continues.
             held.handle.cancel()
             self._held = None
+            self.debounced += 1
+            log.info(
+                "turn debounced: speech resumed %.0f ms after the turn ended (window %.0f ms)",
+                now - held.since,
+                self.debounce_ms,
+            )
             merged = held.merged_into
             new = held.segments[len(merged.segments) :] if merged else held.segments
             self.tracker.put_back(new, continuation=merged is not None)

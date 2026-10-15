@@ -13,6 +13,7 @@ edge (`monotonic_to_daemon_ms`).
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from collections.abc import Iterable, Sequence
@@ -27,6 +28,11 @@ CONTINUATION_MAX_SPOKEN_WORDS = 3.0
 SPOKEN_WORDS_PER_SEC = 2.7
 """Kokoro's speaking rate, to estimate how much of a reply the user has heard."""
 PICK_HOLD_MS = 1000.0
+TURN_DEBOUNCE_MS = float(os.environ.get("SIDECALL_TURN_DEBOUNCE_MS", "500"))
+"""Every turn waits this long before the talker is asked: Smart Turn sometimes ends a turn
+mid-sentence, and speech in the window continues the turn without an API call. Speech is
+only reported after VAD_START_SECS (0.2 s) of it, so the window catches restarts within
+about 300 ms."""
 """Don't submit a turn on Smart Turn alone within this long after a pick."""
 LATE_PICK_MS = 1000.0
 """A pick made up to this long after a turn ended still belongs to it (the daemon only
@@ -168,6 +174,15 @@ def pick_hold_until(now: float, picks: Iterable[PickTime]) -> float | None:
     if not recent:
         return None
     until = max(recent) + PICK_HOLD_MS
+    return until if until > now else None
+
+
+def turn_hold_until(
+    now: float, picks: Iterable[PickTime], debounce_ms: float = TURN_DEBOUNCE_MS
+) -> float | None:
+    """When to submit a turn that just ended: after the debounce window, or later if a
+    pick asks for a longer hold. None: submit now."""
+    until = max(pick_hold_until(now, picks) or now, now + debounce_ms)
     return until if until > now else None
 
 
