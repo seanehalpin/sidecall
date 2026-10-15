@@ -1,7 +1,10 @@
 """Per-turn cost and token usage for talker and worker logs.
 
-`ResultMessage.total_cost_usd` is the running total for the client's session, so a
-turn's own cost is the change since the session's previous result. Pure: no SDK imports.
+`ResultMessage.total_cost_usd` is the running total for the session, so a turn's own
+cost is the change since the session's previous result. A resumed session's total
+includes everything it cost before (checked live), so the tracker needs the last total
+seen for that session, persisted across restarts; without one, the first turn after a
+resume has an unknown cost. Pure: no SDK imports.
 """
 
 from __future__ import annotations
@@ -61,21 +64,29 @@ def format_usage(usage: dict[str, int] | None) -> str:
 
 
 class CostTracker:
-    """Turns session totals into per-turn costs. One per client session: call `reset()`
-    when the session changes (a new client or a rotation)."""
+    """Turns session totals into per-turn costs. Call `reset()` whenever a client
+    connects: with `resumed` and the session's last known total as `baseline`, or for a
+    new session with neither."""
 
     def __init__(self) -> None:
         self._last: float | None = None
+        self._unknown_base = False
 
-    def reset(self) -> None:
-        self._last = None
+    def reset(self, *, resumed: bool = False, baseline: float | None = None) -> None:
+        self._last = baseline
+        # Resumed with no known baseline: the first total includes earlier turns.
+        self._unknown_base = resumed and baseline is None
 
     def record(self, session_cost: float | None, usage: dict[str, Any] | None) -> TurnCost:
         turn: float | None = None
         if session_cost is not None:
-            # A total lower than the last one means the session restarted underneath us.
-            last = self._last if self._last is not None and self._last <= session_cost else 0.0
-            turn = session_cost - last
+            if self._unknown_base:
+                self._unknown_base = False
+            elif self._last is not None and self._last <= session_cost:
+                turn = session_cost - self._last
+            else:
+                # A new session, or a total lower than the last (it restarted).
+                turn = session_cost
             self._last = session_cost
         return TurnCost(session_cost, turn, parse_usage(usage))
 

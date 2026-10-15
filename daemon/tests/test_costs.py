@@ -43,3 +43,17 @@ def test_usage_fields() -> None:
         "cache_write": 0,
         "output": 5,
     }
+
+
+def test_resumed_session_is_measured_from_its_last_known_total() -> None:
+    """A resumed session's total includes its history (checked live)."""
+    costs = CostTracker()
+    costs.reset(resumed=True, baseline=133.0)
+    assert costs.record(133.5, None).turn_cost == 0.5
+
+
+def test_resumed_session_without_a_baseline_has_an_unknown_first_turn() -> None:
+    costs = CostTracker()
+    costs.reset(resumed=True)
+    assert costs.record(133.0, None).turn_cost is None  # not counted as one job
+    assert costs.record(133.25, None).turn_cost == 0.25

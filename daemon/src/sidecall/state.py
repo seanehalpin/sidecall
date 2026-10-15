@@ -103,6 +103,10 @@ class SessionData(Model):
     worker_last_result_at: float | None = None
     worker_context_tokens: int | None = None
     worker_session_cost: float = 0.0
+    # The SDK's last total_cost_usd for each session above: a resumed session's total
+    # includes its history, so per-turn cost is measured from here (costs.py).
+    talker_sdk_total: float | None = None
+    worker_sdk_total: float | None = None
 
 
 class SessionStore:
@@ -132,11 +136,13 @@ class SessionStore:
     def set_chat_cleared(self, now: float) -> None:
         self.data.chat_cleared_at = now
         self.data.talker_session_id = None  # the typed talker starts over too
+        self.data.talker_sdk_total = None
         self._save()
 
-    def set_talker_session(self, session_id: str | None) -> None:
-        if session_id != self.data.talker_session_id:
+    def set_talker_session(self, session_id: str | None, sdk_total: float | None = None) -> None:
+        if session_id != self.data.talker_session_id or sdk_total != self.data.talker_sdk_total:
             self.data.talker_session_id = session_id
+            self.data.talker_sdk_total = sdk_total if session_id else None
             self._save()
 
     def set_worker_session(self, session_id: str | None) -> None:
@@ -151,12 +157,18 @@ class SessionStore:
         )
 
     def record_worker_result(
-        self, session_id: str, turn_cost: float | None, context_tokens: int | None, now: float
+        self,
+        session_id: str,
+        turn_cost: float | None,
+        context_tokens: int | None,
+        now: float,
+        sdk_total: float | None = None,
     ) -> None:
         d = self.data
         if session_id != d.worker_session_id:
             d.worker_session_id = session_id
             d.worker_session_cost = 0.0
+        d.worker_sdk_total = sdk_total
         d.worker_last_result_at = now
         if context_tokens is not None:
             d.worker_context_tokens = context_tokens
@@ -167,7 +179,7 @@ class SessionStore:
         """Forget the worker session (rotation): the next task starts a new one."""
         d = self.data
         d.worker_session_id = None
-        d.worker_last_result_at = d.worker_context_tokens = None
+        d.worker_last_result_at = d.worker_context_tokens = d.worker_sdk_total = None
         d.worker_session_cost = 0.0
         self._save()
 

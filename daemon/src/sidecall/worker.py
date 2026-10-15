@@ -181,7 +181,10 @@ class ClaudeWorker:
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
             self._client = client
-            self._costs.reset()
+            data = self.session.sessions.data
+            self._costs.reset(
+                resumed=data.worker_session_id is not None, baseline=data.worker_sdk_total
+            )
             self._fresh = self.session.sessions.data.worker_session_id is None
         return self._client
 
@@ -265,7 +268,11 @@ class ClaudeWorker:
         cost = self._costs.record(result.total_cost_usd, result.usage)
         self.session.add_cost("worker", cost.turn_cost)
         self.session.sessions.record_worker_result(
-            result.session_id, cost.turn_cost, self._context_tokens, time.time()
+            result.session_id,
+            cost.turn_cost,
+            self._context_tokens,
+            time.time(),
+            result.total_cost_usd,
         )
         stats = self.session.sessions.worker_stats()
         log.info(

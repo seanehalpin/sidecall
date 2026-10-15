@@ -362,7 +362,13 @@ class ClaudeTalker:
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
                 self._client = client
-                self._costs.reset()
+                if self.persist_session:
+                    data = self.session.sessions.data
+                    self._costs.reset(
+                        resumed=data.talker_session_id is not None, baseline=data.talker_sdk_total
+                    )
+                else:
+                    self._costs.reset()
             return self._client
 
     async def warm(self) -> None:
@@ -438,7 +444,7 @@ class ClaudeTalker:
                         "talker" if self.persist_session else "call", cost.turn_cost
                     )
                     if self.persist_session:
-                        self.session.sessions.set_talker_session(msg.session_id)
+                        self.session.sessions.set_talker_session(msg.session_id, msg.total_cost_usd)
                     log.info(
                         "talker turn subtype=%s terminal=%s first_text=%.2fs %s%s",
                         msg.subtype,

@@ -68,3 +68,14 @@ def test_rotation_config_round_trip(tmp_path: Path) -> None:
     cfg.worker_idle_minutes = 5
     cfg.save()
     assert Config.load(tmp_path).rotation.idle_secs == 300
+
+
+def test_sdk_totals_are_kept_per_session(tmp_path: Path) -> None:
+    store = SessionStore(tmp_path / "sessions.json")
+    store.record_worker_result("s1", 0.5, 1000, 1.0, sdk_total=40.0)
+    store.set_talker_session("t1", 2.5)
+    again = SessionStore(tmp_path / "sessions.json").data
+    assert (again.worker_sdk_total, again.talker_sdk_total) == (40.0, 2.5)
+    store.reset_worker()
+    store.set_chat_cleared(5.0)
+    assert store.data.worker_sdk_total is None and store.data.talker_sdk_total is None
