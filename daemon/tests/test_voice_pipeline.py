@@ -408,7 +408,8 @@ async def test_backend_answers_non_trickle_offer_on_loopback() -> None:
                 break
             await asyncio.sleep(0.05)
         assert call.state == "listening"
-        conn: Any = call.backend._conn  # pyright: ignore[reportAttributeAccessIssue]
+        backend: Any = call.backend
+        conn: Any = backend._conn
         conn.send_app_message({"type": "probe"})
         for _ in range(100):
             if received:
