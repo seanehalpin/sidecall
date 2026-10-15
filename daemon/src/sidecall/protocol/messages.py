@@ -27,6 +27,7 @@ from .models import (
     Role,
     Settings,
     Task,
+    WorkerModel,
 )
 
 
@@ -100,6 +101,7 @@ class ApprovalRespondPayload(Model):
 class SettingsUpdatePayload(Model):
     preset: Preset | None = None
     clear_chat_daily: bool | None = None
+    worker_model: WorkerModel | None = None
 
 
 class WebRTCOfferPayload(Model):

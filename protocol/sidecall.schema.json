@@ -1818,10 +1818,20 @@
           ],
           "title": "Preset",
           "type": "string"
+        },
+        "workerModel": {
+          "default": "sonnet",
+          "enum": [
+            "sonnet",
+            "opus"
+          ],
+          "title": "Workermodel",
+          "type": "string"
         }
       },
       "required": [
         "preset",
+        "workerModel",
         "clearChatDaily"
       ],
       "title": "Settings",
@@ -1918,11 +1928,28 @@
           ],
           "default": null,
           "title": "Preset"
+        },
+        "workerModel": {
+          "anyOf": [
+            {
+              "enum": [
+                "sonnet",
+                "opus"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workermodel"
         }
       },
       "required": [
         "preset",
-        "clearChatDaily"
+        "clearChatDaily",
+        "workerModel"
       ],
       "title": "SettingsUpdatePayload",
       "type": "object"

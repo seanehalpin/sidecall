@@ -19,6 +19,7 @@
   import Aura from '@/lib/ui/Aura.svelte';
   import CallControls from '@/lib/ui/CallControls.svelte';
   import RepoMenu from '@/lib/ui/RepoMenu.svelte';
+  import type { SettingsUpdatePayload } from '@/lib/protocol';
   import PickTray from '@/lib/ui/PickTray.svelte';
   import Pairing from '@/lib/ui/Pairing.svelte';
   import RepoSetup from '@/lib/ui/RepoSetup.svelte';
@@ -43,6 +44,11 @@
 
   function openSettings() {
     void browser.runtime.openOptionsPage();
+  }
+
+  /** Send only the settings that changed; the daemon leaves null fields alone. */
+  function updateSettings(patch: Partial<SettingsUpdatePayload>): void {
+    client.send({ type: 'settings.update', payload: { preset: null, clearChatDaily: null, workerModel: null, ...patch } });
   }
 </script>
 
@@ -165,7 +171,8 @@
     {rail}
     onsettings={openSettings}
     onclearchat={() => client.send({ type: 'chat.clear', payload: {} })}
-    onclearchatdaily={(on) => client.send({ type: 'settings.update', payload: { clearChatDaily: on, preset: null } })}
+    onclearchatdaily={(on) => updateSettings({ clearChatDaily: on })}
+    onworkermodel={(model) => updateSettings({ workerModel: model })}
   />
 {/snippet}
 

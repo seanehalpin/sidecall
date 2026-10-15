@@ -5,6 +5,7 @@ import type {
   CallStatePayload,
   ClientMessage,
   ServerMessage,
+  Settings,
   Task,
   TaskEventPayload,
   TranscriptEntry,
@@ -17,6 +18,7 @@ export type Role = TranscriptEntry['role'];
 export type CallState = CallStatePayload['state'];
 export type TaskStatus = Task['status'];
 export type TaskEventKind = TaskEventPayload['kind'];
+export type WorkerModel = Settings['workerModel'];
 
 export type ClientType = ClientMessage['type'];
 export type ClientOf<T extends ClientType> = Extract<ClientMessage, { type: T }>;

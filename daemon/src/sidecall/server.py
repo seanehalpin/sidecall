@@ -447,6 +447,8 @@ class Daemon:
                 session.set_preset(msg.payload.preset)
             if msg.payload.clear_chat_daily is not None:
                 session.set_clear_chat_daily(msg.payload.clear_chat_daily)
+            if msg.payload.worker_model is not None:
+                session.set_worker_model(msg.payload.worker_model)
 
     # --- calls (SPEC §6.8) ---
 

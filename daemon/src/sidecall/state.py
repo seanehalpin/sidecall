@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from .config import atomic_write_text
 from .handoff import WorkerSessionStats
-from .protocol.models import Model, Preset, TranscriptEntry
+from .protocol.models import Model, Preset, TranscriptEntry, WorkerModel
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +97,8 @@ class SessionData(Model):
     worker_session_id: str | None = None
     preset: Preset = "default"
     clear_chat_daily: bool = True
+    worker_model: WorkerModel | None = None
+    """Chosen in the UI; None falls back to config.toml's worker_model, then Sonnet."""
     chat_cleared_at: float = 0.0
     """Epoch ms of the last chat clear (manual or daily)."""
     # About the worker session above, for rotation (handoff.py).
@@ -127,6 +129,10 @@ class SessionStore:
 
     def set_preset(self, preset: Preset) -> None:
         self.data.preset = preset
+        self._save()
+
+    def set_worker_model(self, model: WorkerModel) -> None:
+        self.data.worker_model = model
         self._save()
 
     def set_clear_chat_daily(self, on: bool) -> None:

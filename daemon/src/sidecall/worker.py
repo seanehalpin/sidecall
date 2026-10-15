@@ -115,6 +115,7 @@ class ClaudeWorker:
         self._task_id: str | None = None
         self._costs = CostTracker()
         self._fresh = False  # the client started a new session and hasn't been seeded
+        self._model: str | None = None  # the model the live client is on
         self._context_tokens: int | None = None
 
     # The hook and the permission callback both read the live preset, so a settings
@@ -181,6 +182,7 @@ class ClaudeWorker:
                 client = ClaudeSDKClient(options=self.options())
                 await client.connect()
             self._client = client
+            self._model = self.session.worker_model
             data = self.session.sessions.data
             self._costs.reset(
                 resumed=data.worker_session_id is not None, baseline=data.worker_sdk_total
@@ -216,6 +218,11 @@ class ClaudeWorker:
             )
             await self._maybe_rotate()
             client = await self._ensure_client()
+            if self._model != self.session.worker_model:
+                # Chosen in the UI since the client connected: switch, keeping the session.
+                await client.set_model(self.session.worker_model)
+                self._model = self.session.worker_model
+                log.info("worker switched to %s", self._model)
             if self._fresh:
                 prompt = await asyncio.to_thread(self.session.worker_seed) + prompt
                 self._fresh = False

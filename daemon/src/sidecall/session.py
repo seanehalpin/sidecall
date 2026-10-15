@@ -71,6 +71,7 @@ from .protocol.models import (
     Settings,
     Task,
     TranscriptEntry,
+    WorkerModel,
 )
 from .queue import TaskQueue
 from .state import SessionStore, TranscriptStore
@@ -190,7 +191,7 @@ class RepoSession:
         self.talker_model = talker_model
         # Spoken turns; None means the same model as typed ones.
         self.call_talker_model = call_talker_model or talker_model
-        self.worker_model = worker_model
+        self._default_worker_model = worker_model
         self.rotation = rotation or RotationPolicy()
         self._emit = emit
         self._talker_factory = talker_factory
@@ -279,8 +280,23 @@ class RepoSession:
         self.sessions.set_clear_chat_daily(on)
         self._emit(SettingsState(payload=self.settings()))
 
+    @property
+    def worker_model(self) -> str:
+        """The repo's choice, else config.toml's worker_model, else Sonnet."""
+        return self.sessions.data.worker_model or self._default_worker_model or "sonnet"
+
+    def set_worker_model(self, model: WorkerModel) -> None:
+        log.info("worker model set to %s", model)
+        self.sessions.set_worker_model(model)
+        self._emit(SettingsState(payload=self.settings()))
+
     def settings(self) -> Settings:
-        return Settings(preset=self.preset, clear_chat_daily=self.sessions.data.clear_chat_daily)
+        model = self.worker_model
+        return Settings(
+            preset=self.preset,
+            clear_chat_daily=self.sessions.data.clear_chat_daily,
+            worker_model=model if model in ("sonnet", "opus") else "sonnet",
+        )
 
     # --- clearing the chat ---
 

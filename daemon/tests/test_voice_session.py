@@ -275,3 +275,12 @@ async def test_clear_chat_daily(session: RepoSession) -> None:
     session.set_clear_chat_daily(True)
     assert session.clear_chat_if_new_day(last + day)
     assert session.transcript.recent() == []
+
+
+async def test_worker_model_defaults_to_sonnet_and_is_chosen_per_repo(session: RepoSession) -> None:
+    out = capture(session)
+    assert session.worker_model == "sonnet"
+    assert session.settings().worker_model == "sonnet"
+    session.set_worker_model("opus")
+    assert session.worker_model == "opus"
+    assert [m.payload.worker_model for m in out if m.type == "settings.state"] == ["opus"]

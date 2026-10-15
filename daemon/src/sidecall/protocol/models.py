@@ -221,8 +221,14 @@ class RepoInfo(Model):
     origin: str
 
 
+WorkerModel = Literal["sonnet", "opus"]
+"""The Claude Code (worker) model, as a CLI alias for the latest of each."""
+
+
 class Settings(Model):
     preset: Preset = "default"
+    worker_model: WorkerModel = "sonnet"
+    """Sonnet handles UI edits well at about 60% of Opus's token prices; Opus for harder jobs."""
     clear_chat_daily: bool = True
     """Start each day with an empty chat and a fresh typed-chat talker session."""
 

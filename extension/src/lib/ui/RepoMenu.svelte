@@ -6,6 +6,7 @@
   import MessageSquareXIcon from '@lucide/svelte/icons/message-square-x';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { RailState } from '../rail-state';
+  import type { WorkerModel } from '../protocol';
   import { costRows, formatUsd, totalCost } from '../costs';
 
   let {
@@ -13,12 +14,20 @@
     onsettings,
     onclearchat,
     onclearchatdaily,
+    onworkermodel,
   }: {
     rail: RailState;
     onsettings: () => void;
     onclearchat: () => void;
     onclearchatdaily: (on: boolean) => void;
+    onworkermodel: (model: WorkerModel) => void;
   } = $props();
+
+  const MODELS: { value: WorkerModel; label: string; hint: string }[] = [
+    { value: 'sonnet', label: 'Sonnet', hint: 'Faster and cheaper; plenty for UI changes' },
+    { value: 'opus', label: 'Opus', hint: 'For harder jobs; about 1.7x the cost' },
+  ];
+  const model = $derived(rail.settings?.workerModel ?? 'sonnet');
 
   const name = $derived(rail.repo ? rail.repo.name : 'No repo');
   const path = $derived(rail.repo ? rail.repo.path : (rail.origin ?? 'No local app'));
@@ -54,6 +63,19 @@
       </DropdownMenu.Group>
     {/if}
     {#if rail.repo}
+      <DropdownMenu.Separator />
+      <!-- Inline, not a submenu: the side panel is too narrow for one to fly out. -->
+      <DropdownMenu.Label class="sc-model px-2 pt-1.5 pb-0.5 text-xs font-normal text-muted-foreground">Claude Code model</DropdownMenu.Label>
+      <DropdownMenu.RadioGroup value={model} onValueChange={(v) => onworkermodel(v as WorkerModel)}>
+        {#each MODELS as m (m.value)}
+          <DropdownMenu.RadioItem value={m.value} closeOnSelect={false}>
+            <span class="flex flex-col">
+              <span>{m.label}</span>
+              <span class="text-xs text-muted-foreground">{m.hint}</span>
+            </span>
+          </DropdownMenu.RadioItem>
+        {/each}
+      </DropdownMenu.RadioGroup>
       <DropdownMenu.Separator />
       <!-- Clearing also starts the chat agent on a fresh session, which keeps its context small. -->
       <DropdownMenu.Item onSelect={onclearchat} disabled={rail.transcript.length === 0}>

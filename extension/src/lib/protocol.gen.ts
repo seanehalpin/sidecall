@@ -480,6 +480,7 @@ export interface SettingsUpdate {
 export interface SettingsUpdatePayload {
   clearChatDaily: boolean | null;
   preset: ('cautious' | 'default' | 'permissive') | null;
+  workerModel: ('sonnet' | 'opus') | null;
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema
@@ -603,6 +604,7 @@ export interface Costs {
 export interface Settings {
   clearChatDaily: boolean;
   preset: 'cautious' | 'default' | 'permissive';
+  workerModel: 'sonnet' | 'opus';
 }
 /**
  * This interface was referenced by `SidecallProtocol`'s JSON-Schema
