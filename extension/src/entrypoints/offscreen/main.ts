@@ -90,6 +90,12 @@ async function start(): Promise<void> {
     };
     // SmallWebRTC sends agent audio back on the same (sendrecv) transceiver.
     for (const track of mic.getTracks()) conn.addTrack(track, mic);
+    // Pipecat's own messages (signalling, peer-left) go over a data channel, which must be in
+    // the offer; without one it warns after 10 s and drops them. Any label works. Our app
+    // messages stay on the daemon WebSocket. No "ping"s are sent, so Pipecat keeps judging
+    // the connection by WebRTC state rather than expecting a ping every 3 s.
+    const channel = conn.createDataChannel('sidecall');
+    channel.onmessage = (e) => console.debug('[On it] pipecat message', e.data);
     await conn.setLocalDescription(await conn.createOffer());
     await iceComplete(conn);
     const sdp = conn.localDescription?.sdp;

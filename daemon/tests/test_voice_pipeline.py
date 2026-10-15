@@ -392,6 +392,11 @@ async def test_backend_answers_non_trickle_offer_on_loopback() -> None:
     call = Call(session, sent.append, PipecatBackend)
     pc: Any = RTCPeerConnection()
     pc.addTrack(AudioStreamTrack())
+    # Like the offscreen document: a data channel in the offer, so Pipecat's app
+    # messages reach the client instead of timing out.
+    channel: Any = pc.createDataChannel("sidecall")
+    received: list[str] = []
+    channel.on("message", received.append)
     await pc.setLocalDescription(await pc.createOffer())
     try:
         answer = await asyncio.wait_for(call.offer(pc.localDescription.sdp), 60)
@@ -403,6 +408,13 @@ async def test_backend_answers_non_trickle_offer_on_loopback() -> None:
                 break
             await asyncio.sleep(0.05)
         assert call.state == "listening"
+        conn: Any = call.backend._conn  # pyright: ignore[reportAttributeAccessIssue]
+        conn.send_app_message({"type": "probe"})
+        for _ in range(100):
+            if received:
+                break
+            await asyncio.sleep(0.05)
+        assert received and '"probe"' in received[0]
     finally:
         await call.end()
         await pc.close()
